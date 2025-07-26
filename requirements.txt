@@ -1,0 +1,10 @@
+ray[serve]==2.20.0
+fastapi==0.110.0
+uvicorn==0.29.0
+pandas
+scikit-learn
+numpy
+matplotlib
+yfinance
+ta
+arch
