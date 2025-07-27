@@ -1,0 +1,18 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+    restart: always
+
+  frontend:
+    build:
+      context: ./Client
+      dockerfile: Dockerfile
+    ports:
+      - "5173:80"  # 5173 es puerto típico de Vite en dev
+    restart: always
