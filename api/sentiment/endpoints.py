@@ -7,8 +7,12 @@ from datetime import date
 import pandas as pd
 from fastapi.responses import StreamingResponse
 import io
+from pydantic import BaseModel
+from ray_task.sentiment import run_pipeline
 
-
+class RecalcInput(BaseModel):
+    criterio: str
+    
 router = APIRouter(prefix="/sentiment")
 
 @router.get("/returns", summary="Obtener retornos acumulados")
@@ -67,3 +71,10 @@ def download_filtered_csv(
     return StreamingResponse(buffer, media_type="text/csv", headers={
         "Content-Disposition": f"attachment; filename=retornos_{start_date}_a_{end_date}.csv"
     })
+  
+@router.post("/recalculate", summary="Recalcular portafolio con criterio dinámico")
+def recalculate_portfolio(body: RecalcInput):
+    df = run_pipeline(body.criterio)
+    df = df.reset_index() 
+    df["Date"] = df["Date"].astype(str)
+    return JSONResponse(content=df.to_dict(orient="records"))
