@@ -7,7 +7,9 @@ app = FastAPI(title="API de Análisis de Portafolio")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+ allow_origins=[
+        "http://75.101.196.19:5173",
+    ],
     allow_credentials=True,
     allow_methods=["*"], 
     allow_headers=["*"],    

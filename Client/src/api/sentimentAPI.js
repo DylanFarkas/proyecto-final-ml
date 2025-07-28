@@ -1,8 +1,12 @@
 import axios from 'axios';
 
+const baseURL = import.meta.env.VITE_API_URL;
+
 const sentimentApi = axios.create({
-  baseURL: import.meta.env.VITE_API_URL + '/sentiment',
+  baseURL: 'http://75.101.196.19:8000/sentiment/',
 });
+
+console.log(baseURL);
 
 export const getSentimentReturns = () => sentimentApi.get('/returns');
 
