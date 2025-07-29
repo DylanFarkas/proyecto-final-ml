@@ -1,5 +1,3 @@
-# intradaily_strategy.py
-
 import pandas as pd
 import numpy as np
 from arch import arch_model
@@ -79,6 +77,18 @@ def generar_senal_intradia(intraday_df, senales_diarias):
             return np.nan
 
     df['signal_intraday'] = df.apply(signal, axis=1)
+
+    # Señal combinada como en el notebook
+    def combinacion(row):
+        if row['signal_daily'] == 1 and row['signal_intraday'] == 1:
+            return -1
+        elif row['signal_daily'] == -1 and row['signal_intraday'] == -1:
+            return 1
+        else:
+            return np.nan
+
+    df['return_sign'] = df.apply(combinacion, axis=1)
+    df['return_sign'] = df.groupby(pd.Grouper(freq='D'))['return_sign'].transform(lambda x: x.ffill())
     return df
 
 # -------------------------
@@ -86,10 +96,11 @@ def generar_senal_intradia(intraday_df, senales_diarias):
 # -------------------------
 def calcular_retorno_final(df):
     df = df.copy()
-    df['log_ret_intra'] = np.log(df['close']).diff()
-    df['strategy_return'] = df.apply(
-        lambda x: x['log_ret_intra'] * x['signal_intraday'] if pd.notna(x['signal_intraday']) else 0,
-        axis=1
-    )
-    df['cumulative_strategy_return'] = df['strategy_return'].cumsum()
+    df['return'] = df['close'].pct_change()
+    df['forward_return'] = df['return'].shift(-1)
+    df['strategy_return'] = df['forward_return'] * df['return_sign']
+
+    # Acumulado exponencial como en el notebook
+    df['strategy_return'] = df['strategy_return'].fillna(0)
+    df['cumulative_strategy_return'] = np.exp(np.log1p(df['strategy_return']).cumsum()) - 1
     return df

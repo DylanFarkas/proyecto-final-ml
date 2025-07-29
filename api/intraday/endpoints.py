@@ -1,100 +1,110 @@
-# intradaily_endpoints.py
-
 from fastapi import APIRouter, Query
-from fastapi.responses import JSONResponse, FileResponse
-from ray_task.intraday import (
-    cargar_datos_diarios,
-    cargar_datos_intradia,
-    generar_senal_diaria,
-    generar_senal_intradia,
-    calcular_retorno_final
-)
-import ray
-import os
 from datetime import datetime
+import numpy as np
 import pandas as pd
-from api.intraday.plot import generate_plot
+from ray_task.intraday import cargar_datos_diarios, cargar_datos_intradia, generar_senal_diaria, generar_senal_intradia, calcular_retorno_final
+from fastapi.responses import FileResponse
+import tempfile
 
 
 router = APIRouter(prefix="/intradaily")
 
-# Inicializar Ray (si no está iniciado)
-if not ray.is_initialized():
-    ray.init()
+@router.post("/run-strategy/")
+def run_intraday_strategy():
+    daily_df = cargar_datos_diarios("datasets/simulated_daily_data.csv")
+    intraday_df = cargar_datos_intradia("datasets/simulated_5min_data.csv")
 
-# Rutas de los datos
-RUTA_DIARIA = "datasets/simulated_daily_data.csv"
-RUTA_INTRADIA = "datasets/simulated_5min_data.csv"
-EXPORT_PATH = "output/estrategia_intradia_resultado.csv"
-
-@router.get("/signals", summary="Señales intradía y diarias")
-def get_signals():
-    daily_df = cargar_datos_diarios(RUTA_DIARIA)
-    intraday_df = cargar_datos_intradia(RUTA_INTRADIA)
-    daily_df = generar_senal_diaria(daily_df)
-    final_df = generar_senal_intradia(intraday_df, daily_df)
-    final_df.reset_index(inplace=True)
-    final_df['datetime'] = final_df['datetime'].astype(str)
-    return JSONResponse(content=final_df[['datetime', 'signal_daily', 'signal_intraday']].dropna().to_dict(orient="records"))
-
-@router.get("/returns", summary="Retornos acumulados de estrategia")
-def get_returns(skip: int = 0, limit: int = 30):
-    daily_df = cargar_datos_diarios(RUTA_DIARIA)
-    intraday_df = cargar_datos_intradia(RUTA_INTRADIA)
     daily_df = generar_senal_diaria(daily_df)
     final_df = generar_senal_intradia(intraday_df, daily_df)
     final_df = calcular_retorno_final(final_df)
-    final_df.reset_index(inplace=True)
-    final_df['datetime'] = final_df['datetime'].astype(str)
-    sliced = final_df[['datetime', 'strategy_return', 'cumulative_strategy_return']].dropna().iloc[skip:skip+limit]
-    return JSONResponse(content=sliced.to_dict(orient="records"))
+    
+    final_df.to_csv("output/estrategia_intradia_resultado.csv")
+    return {"message": "✅ Estrategia ejecutada y guardada"}
 
-@router.get("/dates", summary="Fechas disponibles para consulta")
-def get_available_dates():
-    intraday_df = cargar_datos_intradia(RUTA_INTRADIA)
-    fechas = sorted(pd.Series(intraday_df.index.date).astype(str).unique().tolist())
+@router.get("/dates")
+def available_dates():
+    df = pd.read_csv("output/estrategia_intradia_resultado.csv", parse_dates=['datetime'])
+    fechas = sorted(df['datetime'].dt.date.unique())
+    fechas_str = [f.strftime("%Y-%m-%d") for f in fechas]
+    return {"dates": fechas_str}
 
-    return JSONResponse(content={"available_dates": fechas})
-
-@router.get("/returns/filter", summary="Retornos filtrados por fecha")
-def get_returns_by_date(
-    start_date: str = Query(..., description="Fecha inicio en formato YYYY-MM-DD"),
-    end_date: str = Query(..., description="Fecha fin en formato YYYY-MM-DD")
+@router.get("/returns", summary="Retorno acumulado de la estrategia (como el notebook)")
+def get_cumulative_returns(
+    start_date: str = Query(None), 
+    end_date: str = Query(None)
 ):
-    daily_df = cargar_datos_diarios(RUTA_DIARIA)
-    intraday_df = cargar_datos_intradia(RUTA_INTRADIA)
-    daily_df = generar_senal_diaria(daily_df)
-    final_df = generar_senal_intradia(intraday_df, daily_df)
-    final_df = calcular_retorno_final(final_df)
-    final_df.reset_index(inplace=True)
-    final_df['datetime'] = pd.to_datetime(final_df['datetime'])
-    mask = (final_df['datetime'] >= pd.to_datetime(start_date)) & (final_df['datetime'] <= pd.to_datetime(end_date))
-    filtered = final_df.loc[mask, ['datetime', 'strategy_return', 'cumulative_strategy_return']].dropna()
-    filtered['datetime'] = filtered['datetime'].astype(str)
-    return JSONResponse(content=filtered.to_dict(orient="records"))
+    df = pd.read_csv("output/estrategia_intradia_resultado.csv", parse_dates=["datetime"])
+    df["date"] = df["datetime"].dt.date
 
-@router.get("/export", summary="Descargar CSV con estrategia")
-def export_csv():
-    daily_df = cargar_datos_diarios(RUTA_DIARIA)
-    intraday_df = cargar_datos_intradia(RUTA_INTRADIA)
-    daily_df = generar_senal_diaria(daily_df)
-    final_df = generar_senal_intradia(intraday_df, daily_df)
-    final_df = calcular_retorno_final(final_df)
-    os.makedirs("output", exist_ok=True)
-    final_df.to_csv(EXPORT_PATH)
-    return FileResponse(EXPORT_PATH, media_type="text/csv", filename="estrategia_intradia_resultado.csv")
+    # Filtrar fechas si aplica
+    if start_date:
+        df = df[df["date"] >= datetime.strptime(start_date, "%Y-%m-%d").date()]
+    if end_date:
+        df = df[df["date"] <= datetime.strptime(end_date, "%Y-%m-%d").date()]
 
-@router.get("/plot", summary="Gráfico del retorno acumulado de la estrategia")
-def get_strategy_plot():
-    daily_df = cargar_datos_diarios(RUTA_DIARIA)
-    intraday_df = cargar_datos_intradia(RUTA_INTRADIA)
-    daily_df = generar_senal_diaria(daily_df)
-    final_df = generar_senal_intradia(intraday_df, daily_df)
-    final_df = calcular_retorno_final(final_df)
-    final_df.reset_index(inplace=True)
+    # Asegurar que los retornos están completos
+    df["strategy_return"] = df["strategy_return"].fillna(0)
 
-    final_df["datetime"] = final_df["datetime"].astype(str)
-    plot_path = generate_plot(final_df)
+    # Agrupar por día y calcular retorno acumulado exponencial
+    daily_df = df.groupby("date")[["strategy_return"]].sum()
+    daily_df["cumulative_strategy_return"] = np.exp(np.log1p(daily_df["strategy_return"]).cumsum()) - 1
+    daily_df = daily_df.reset_index()
+    daily_df["date"] = daily_df["date"].astype(str)
+    daily_df["cumulative_strategy_return"] = daily_df["cumulative_strategy_return"] * 100  # % opcional
 
-    return FileResponse(plot_path, media_type="image/png", filename="estrategia_intradia_plot.png")
+    return daily_df[["date", "cumulative_strategy_return"]].to_dict(orient="records")
+
+@router.get("/returns/daily", summary="Retorno diario simple (sin acumulado)")
+def get_daily_returns(
+    start_date: str = Query(None),
+    end_date: str = Query(None)):
+    
+    df = pd.read_csv("output/estrategia_intradia_resultado.csv", parse_dates=["datetime"])
+    df["date"] = df["datetime"].dt.date
+
+    # Filtrar fechas si aplica
+    if start_date:
+        df = df[df["date"] >= datetime.strptime(start_date, "%Y-%m-%d").date()]
+    if end_date:
+        df = df[df["date"] <= datetime.strptime(end_date, "%Y-%m-%d").date()]
+
+    # Agrupar por día
+    daily_return_df = df.groupby("date")[["strategy_return"]].sum().reset_index()
+
+    # Convertir a porcentaje (opcional)
+    daily_return_df["strategy_return"] = daily_return_df["strategy_return"] * 100
+    daily_return_df["date"] = daily_return_df["date"].astype(str)
+
+    return daily_return_df.to_dict(orient="records")
+
+
+@router.get("/returns/download", summary="Descargar CSV del retorno actual")
+def download_returns_csv(
+    start_date: str = Query(None),
+    end_date: str = Query(None),
+    tipo: str = Query("acumulado")  # "acumulado" o "diario"
+):
+    df = pd.read_csv("output/estrategia_intradia_resultado.csv", parse_dates=["datetime"])
+    df["date"] = df["datetime"].dt.date
+
+    if start_date:
+        df = df[df["date"] >= datetime.strptime(start_date, "%Y-%m-%d").date()]
+    if end_date:
+        df = df[df["date"] <= datetime.strptime(end_date, "%Y-%m-%d").date()]
+
+    df["strategy_return"] = df["strategy_return"].fillna(0)
+    result_df = df.groupby("date")[["strategy_return"]].sum()
+
+    if tipo == "acumulado":
+        result_df["cumulative_strategy_return"] = np.exp(np.log1p(result_df["strategy_return"]).cumsum()) - 1
+        result_df = result_df[["cumulative_strategy_return"]]
+    else:
+        result_df = result_df[["strategy_return"]]
+
+    result_df = result_df.reset_index()
+    result_df["date"] = result_df["date"].astype(str)
+
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".csv", mode="w", newline="") as tmp:
+        result_df.to_csv(tmp.name, index=False)
+        return FileResponse(tmp.name, filename=f"retornos_{tipo}.csv", media_type="text/csv")
 
