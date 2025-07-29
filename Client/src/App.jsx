@@ -23,7 +23,7 @@ const App = () => {
       <div className={`${darkMode ? "dark" : ""}`}>
         <div className="min-h-screen bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-white">
           <header className="bg-white dark:bg-gray-800 shadow p-4 flex justify-between items-center">
-            <h1 className="text-xl font-bold">Análisis</h1>
+            <h1 className="text-xl font-bold">Proyecto Final</h1>
 
             <div className="flex gap-4 items-center">
               <button

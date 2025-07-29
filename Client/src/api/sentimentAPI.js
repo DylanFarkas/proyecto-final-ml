@@ -37,3 +37,13 @@ export const downloadFilteredReturnsCSV = async (startDate, endDate) => {
         console.error('Error al descargar CSV:', error);
     }
 };
+
+export const recalculatePortfolio = async (criterio) => {
+    try {
+        const res = await sentimentApi.post('/recalculate', { criterio })
+        return res.data;
+    } catch (error) {
+        console.error('Error al recalcular el portafolio:', error);
+        throw error;
+    }
+}
