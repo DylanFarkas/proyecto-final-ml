@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { recalculatePortfolio } from "../../api/sentimentAPI";
 import Swal from 'sweetalert2';
 
@@ -6,6 +6,8 @@ const RecalculateForm = ({ onSuccess, onCriterioChange }) => {
     const [criterio, setCriterio] = useState(() => {
         return localStorage.getItem("criterioActivo") || "engagement_ratio";
     });
+    const [status, setStatus] = useState("");
+    const [progress, setProgress] = useState(0);
 
     const [loading, setLoading] = useState(false);
 
@@ -35,6 +37,23 @@ const RecalculateForm = ({ onSuccess, onCriterioChange }) => {
         }
     };
 
+    useEffect(() => {
+        let interval;
+        if (loading) {
+            interval = setInterval(async () => {
+                try {
+                    const res = await fetch("http://localhost:8000/sentiment/recalculate/status");
+                    const json = await res.json();
+                    setStatus(json.status);
+                    setProgress(json.progress);
+                } catch (err) {
+                    console.error("Error polling progreso:", err);
+                }
+            }, 1000);
+        }
+        return () => clearInterval(interval);
+    }, [loading]);
+
     return (
         <div className="mb-6">
             <label className="block text-sm font-medium mb-1 text-gray-700 dark:text-white">
@@ -58,7 +77,19 @@ const RecalculateForm = ({ onSuccess, onCriterioChange }) => {
             >
                 {loading ? "Calculando..." : "Recalcular Portafolio"}
             </button>
+
+            {loading && (
+                <div className="mt-2 text-sm text-gray-700 dark:text-gray-300">
+                    {status} ({progress}%)
+                    <div className="w-full bg-gray-200 rounded h-2 mt-1 dark:bg-gray-700">
+                        <div className="bg-blue-500 h-2 rounded" style={{ width: `${progress}%` }}></div>
+                    </div>
+                </div>
+            )}
+
         </div>
+
+
     );
 };
 

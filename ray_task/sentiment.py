@@ -1,4 +1,3 @@
-
 import ray
 import pandas as pd
 import numpy as np
@@ -83,44 +82,60 @@ def get_benchmark_returns(start: str = '2021-01-01', end: str = '2023-03-01') ->
 def calculate_cumulative_returns(portfolio_df: pd.DataFrame) -> pd.DataFrame:
     return np.exp(np.log1p(portfolio_df).cumsum()).sub(1)
 
-def run_pipeline(criterio: str = "engagement_ratio", path: str = "datasets/sentiment_data.csv") -> pd.DataFrame:
+def run_pipeline(criterio: str = "engagement_ratio", path: str = "datasets/sentiment_data.csv", tracker=None) -> pd.DataFrame:
+    if tracker:
+        ray.get(tracker.set_status.remote("Cargando datos de sentimiento", 5))
     sentiment_df = load_sentiment_data(path)
-    
-    # Asegurar columna si no es engagement_ratio
-    if criterio != "engagement_ratio":
-        if criterio not in sentiment_df.columns:
-            raise ValueError(f"'{criterio}' no es una columna válida en el dataset.")
-    else:
-        sentiment_df['engagement_ratio'] = sentiment_df['twitterComments'] / sentiment_df['twitterLikes']
 
-    print(f"📊 Filtrando y rankeando por: {criterio}")
+    if tracker:
+        ray.get(tracker.set_status.remote(f"Filtrando y rankeando por {criterio}", 15))
     filtered_df = filter_and_rank(sentiment_df, criterio)
 
-    print("🗓️ Obteniendo fechas fijas")
+    if tracker:
+        ray.get(tracker.set_status.remote("Obteniendo fechas para portafolio", 25))
     fixed_dates = get_filtered_dates(filtered_df)
 
     symbols = sentiment_df.index.get_level_values('symbol').unique().tolist()
-    print("✅ Validando símbolos")
+
+    if tracker:
+        ray.get(tracker.set_status.remote("Validando símbolos", 35))
     valid_symbols, _ = validate_symbols_parallel(symbols)
 
-    print("📥 Descargando precios")
+    if tracker:
+        ray.get(tracker.set_status.remote("Descargando precios de mercado", 50))
     prices_df = ray.get(download_prices.remote(valid_symbols))
 
-    print("📈 Calculando retornos")
+    if tracker:
+        ray.get(tracker.set_status.remote("Calculando retornos", 65))
     returns_df = calculate_returns(prices_df)
 
-    print("📦 Construyendo portafolio mensual")
+    if tracker:
+        ray.get(tracker.set_status.remote("Construyendo portafolio mensual", 80))
     portfolio_df = assemble_portfolio(returns_df, fixed_dates)
 
-    print("📉 Agregando benchmark QQQ")
+    if tracker:
+        ray.get(tracker.set_status.remote("Agregando benchmark QQQ", 90))
     benchmark_series = get_benchmark_returns()
     portfolio_df['nasdaq_return'] = benchmark_series
 
-    print("📊 Calculando retorno acumulado")
+    if tracker:
+        ray.get(tracker.set_status.remote("Calculando retorno acumulado final", 100))
     cumulative_df = calculate_cumulative_returns(portfolio_df)
 
-    # Guarda resultado
     os.makedirs("output", exist_ok=True)
     cumulative_df.to_csv("output/cumulative_returns.csv")
 
     return cumulative_df
+
+@ray.remote
+class ProgressTracker:
+    def _init_(self):
+        self.status = "Inicializando..."
+        self.progress = 0
+
+    def set_status(self, status: str, progress: int):
+        self.status = status
+        self.progress = progress
+
+    def get_status(self):
+        return {"status": self.status, "progress": self.progress}

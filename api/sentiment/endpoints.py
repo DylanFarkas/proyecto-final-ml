@@ -1,5 +1,6 @@
 from fastapi import APIRouter
 from fastapi.responses import FileResponse, JSONResponse
+import ray
 from api.sentiment.portfolio import get_cumulative_returns
 from api.sentiment.plot import generate_plot
 from fastapi import Query
@@ -9,6 +10,7 @@ from fastapi.responses import StreamingResponse
 import io
 from pydantic import BaseModel
 from ray_task.sentiment import run_pipeline
+from ray_task.sentiment import ProgressTracker
 
 class RecalcInput(BaseModel):
     criterio: str
@@ -69,12 +71,20 @@ def download_filtered_csv(
     buffer.seek(0)
 
     return StreamingResponse(buffer, media_type="text/csv", headers={
-        "Content-Disposition": f"attachment; filename=retornos_{start_date}_a_{end_date}.csv"
+        "Content-Disposition": f"attachment; filename=retornos_{start_date}a{end_date}.csv"
     })
+
+progress_actor = ProgressTracker.remote() 
   
 @router.post("/recalculate", summary="Recalcular portafolio con criterio dinámico")
 def recalculate_portfolio(body: RecalcInput):
-    df = run_pipeline(body.criterio)
-    df = df.reset_index() 
+    df = run_pipeline(body.criterio, tracker=progress_actor)
+    df = df.reset_index()
     df["Date"] = df["Date"].astype(str)
     return JSONResponse(content=df.to_dict(orient="records"))
+ 
+
+@router.get("/recalculate/status", summary="Consultar estado de cálculo en curso")
+def get_recalculation_status():
+    status = ray.get(progress_actor.get_status.remote())
+    return JSONResponse(content=status)
