@@ -1,5 +1,9 @@
+import time
 from fastapi import APIRouter
 from fastapi.responses import FileResponse, JSONResponse
+import numpy as np
+import psutil
+import ray
 from api.sentiment.portfolio import get_cumulative_returns
 from api.sentiment.plot import generate_plot
 from fastapi import Query
@@ -7,9 +11,25 @@ from datetime import date
 import pandas as pd
 from fastapi.responses import StreamingResponse
 import io
+from pydantic import BaseModel
+from ray_task.sentiment import run_pipeline
+from ray_task.sentiment import ProgressTracker
+from benchmarking.sentiment_compare import run_pipeline_sequential, run_parallel_pipeline
 
-
+class RecalcInput(BaseModel):
+    criterio: str
+    
 router = APIRouter(prefix="/sentiment")
+
+def measure_cpu_usage(interval=1, duration=3):
+    cpu_readings = [psutil.cpu_percent(interval=interval) for _ in range(duration)]
+    return np.mean(cpu_readings)
+
+download_progress = 0
+
+def update_download_progress(progress: int):
+    global download_progress
+    download_progress = progress
 
 @router.get("/returns", summary="Obtener retornos acumulados")
 def get_returns():
@@ -65,5 +85,63 @@ def download_filtered_csv(
     buffer.seek(0)
 
     return StreamingResponse(buffer, media_type="text/csv", headers={
-        "Content-Disposition": f"attachment; filename=retornos_{start_date}_a_{end_date}.csv"
+        "Content-Disposition": f"attachment; filename=retornos_{start_date}a{end_date}.csv"
     })
+
+progress_actor = ProgressTracker.remote() 
+  
+@router.post("/recalculate", summary="Recalcular portafolio con criterio dinámico")
+def recalculate_portfolio(body: RecalcInput):
+    df = run_pipeline(body.criterio, tracker=progress_actor)
+    df = df.reset_index()
+    df["Date"] = df["Date"].astype(str)
+    return JSONResponse(content=df.to_dict(orient="records"))
+ 
+
+@router.get("/recalculate/status", summary="Consultar estado de cálculo en curso")
+def get_recalculation_status():
+    status = ray.get(progress_actor.get_status.remote())
+    return JSONResponse(content=status)
+
+@router.get("/download/progress", summary="Obtener el progreso de la descarga de datos")
+def get_download_progress():
+    return {"progress": download_progress}
+
+@router.get("/compare", summary="Comparar rendimiento secuencial vs paralelo")
+def compare_performance():
+    print("Ejecutando pipeline secuencial...")
+    update_download_progress(25)  
+    cpu_before_secuencial = measure_cpu_usage()
+    start_time = time.time()
+    result_secuencial = run_pipeline_sequential()
+    secuencial_time = time.time() - start_time
+    cpu_after_secuencial = measure_cpu_usage()
+    print(f"Tiempo de ejecución secuencial: {secuencial_time:.2f} segundos")
+    print(f"Uso de CPU secuencial: {cpu_after_secuencial}%")
+    
+    update_download_progress(50) 
+
+    print("\nEjecutando pipeline paralelo...")
+    cpu_before_paralelo = measure_cpu_usage()
+    start_time = time.time()
+    result_paralelo = run_parallel_pipeline()
+    paralelo_time = time.time() - start_time
+    cpu_after_paralelo = measure_cpu_usage()
+    print(f"Tiempo de ejecución paralelo: {paralelo_time:.2f} segundos")
+    print(f"Uso de CPU paralelo: {cpu_after_paralelo}%")
+
+    update_download_progress(100)  
+
+   
+    comparison_result = {
+        "secuencial": {
+            "tiempo": secuencial_time,
+            "cpu": cpu_after_secuencial
+        },
+        "paralelo": {
+            "tiempo": paralelo_time,
+            "cpu": cpu_after_paralelo
+        }
+    }
+
+    return JSONResponse(content=comparison_result)
