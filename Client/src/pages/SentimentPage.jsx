@@ -31,10 +31,6 @@ const SentimentPage = () => {
         />
 
         <StatsSummary />
-        <div>
-          <h3 className="text-xl font-semibold mb-2">Gráfico de Retornos Acumulados</h3>
-          <MainPlot />
-        </div>
 
         <FilteredReturns />
       </div>

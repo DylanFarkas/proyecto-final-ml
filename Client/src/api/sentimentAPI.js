@@ -4,7 +4,7 @@ const baseURL = import.meta.env.VITE_API_URL;
 
 const sentimentApi = axios.create({
   baseURL: 'http://localhost:8000/sentiment/',
-  timeout: 30000, // 30 segundos de timeout
+  timeout: 30000, // 3 minutos de timeout
 });
 
 // Añadir interceptor para requests
