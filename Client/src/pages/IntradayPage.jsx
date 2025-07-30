@@ -1,10 +1,10 @@
-import { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
 import {
   runIntradayStrategy,
   getAvailableDates,
   getReturns,
   getDailyReturns,
-  getDownloadLink
+  getDownloadLink,
 } from "../api/intradayAPI";
 
 import {
@@ -17,6 +17,7 @@ import {
   Legend,
   ResponsiveContainer,
 } from "recharts";
+import Swal from "sweetalert2"; 
 
 const IntradayPage = () => {
   const [status, setStatus] = useState("");
@@ -26,8 +27,6 @@ const IntradayPage = () => {
   const [returnsData, setReturnsData] = useState([]);
   const [tipoRetorno, setTipoRetorno] = useState("acumulado");
 
-
-  // Cargar fechas disponibles
   const loadDates = async () => {
     try {
       const res = await getAvailableDates();
@@ -37,19 +36,32 @@ const IntradayPage = () => {
     }
   };
 
-  // Ejecutar estrategia
   const handleRunStrategy = async () => {
     setStatus("Ejecutando estrategia...");
     try {
       const res = await runIntradayStrategy();
       setStatus(res.message);
       await loadDates();
+
+      Swal.fire({
+        title: "¡Estrategia Ejecutada!",
+        text: "La estrategia intradía se ha ejecutado con éxito Seleccione las fechas para ver los resultados",
+        icon: "success",
+        confirmButtonText: "Aceptar",
+        confirmButtonColor: "#2563eb",
+      });
     } catch {
       setStatus("❌ Error al ejecutar la estrategia");
+
+      Swal.fire({
+        title: "¡Error!",
+        text: "Hubo un problema al ejecutar la estrategia intradía.",
+        icon: "error",
+        confirmButtonText: "Aceptar",
+      });
     }
   };
 
-  // Cargar retornos
   const loadReturns = async () => {
     try {
       const fn = tipoRetorno === "diario" ? getDailyReturns : getReturns;
@@ -59,7 +71,6 @@ const IntradayPage = () => {
       console.error("Error obteniendo retornos", err);
     }
   };
-
 
   useEffect(() => {
     loadDates();
@@ -77,7 +88,6 @@ const IntradayPage = () => {
     }
   }, [startDate, endDate, tipoRetorno]);
 
-
   return (
     <div className="max-w-7xl mx-auto p-6 space-y-6">
       <h2 className="text-3xl font-bold text-blue-700 dark:text-white">
@@ -86,7 +96,7 @@ const IntradayPage = () => {
 
       <button
         onClick={handleRunStrategy}
-        className="px-4 py-2 bg-green-600 text-white rounded"
+        className="px-4 py-2 bg-green-600 cursor-pointer text-white rounded"
       >
         Ejecutar estrategia
       </button>
@@ -103,7 +113,6 @@ const IntradayPage = () => {
           <option value="diario">Diario (%)</option>
         </select>
       </div>
-
 
       {/* Filtros de fecha */}
       <div className="flex flex-wrap gap-4 items-center">
@@ -141,7 +150,6 @@ const IntradayPage = () => {
       </div>
 
       {/* Gráfico */}
-
       <div className="bg-white dark:bg-gray-800 rounded shadow p-4">
         <h3 className="text-lg font-semibold mb-2">Retornos (%)</h3>
         <div className="mt-4 mb-5 flex justify-end">
@@ -176,12 +184,11 @@ const IntradayPage = () => {
                 type="monotone"
                 dataKey="cumulative_strategy_return"
                 name="Retorno acumulado (%)"
-                stroke="#1D4ED8"
+                stroke="#155DFC"
                 dot={false}
               />
             )}
           </LineChart>
-
         </ResponsiveContainer>
       </div>
     </div>

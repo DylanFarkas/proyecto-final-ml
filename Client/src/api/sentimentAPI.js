@@ -47,3 +47,23 @@ export const recalculatePortfolio = async (criterio) => {
         throw error;
     }
 }
+
+export const getComparisonData = async () => {
+    try {
+        const response = await sentimentApi.get('/compare');
+        return response.data;
+    } catch (error) {
+        console.error('Error al obtener la comparación de rendimiento:', error);
+        throw error;
+    }
+};
+
+export const getDownloadSentimentProgress = async () => {
+    try {
+        const response = await sentimentApi.get('download/progress'); // Llama al API para obtener el progreso
+        return response.data; 
+    } catch (error) {
+        console.error('Error obteniendo el progreso de descarga:', error);
+        throw error;
+    }
+};

@@ -1,5 +1,8 @@
+import time
 from fastapi import APIRouter
 from fastapi.responses import FileResponse, JSONResponse
+import numpy as np
+import psutil
 import ray
 from api.sentiment.portfolio import get_cumulative_returns
 from api.sentiment.plot import generate_plot
@@ -11,11 +14,22 @@ import io
 from pydantic import BaseModel
 from ray_task.sentiment import run_pipeline
 from ray_task.sentiment import ProgressTracker
+from benchmarking.sentiment_compare import run_pipeline_sequential, run_parallel_pipeline
 
 class RecalcInput(BaseModel):
     criterio: str
     
 router = APIRouter(prefix="/sentiment")
+
+def measure_cpu_usage(interval=1, duration=3):
+    cpu_readings = [psutil.cpu_percent(interval=interval) for _ in range(duration)]
+    return np.mean(cpu_readings)
+
+download_progress = 0
+
+def update_download_progress(progress: int):
+    global download_progress
+    download_progress = progress
 
 @router.get("/returns", summary="Obtener retornos acumulados")
 def get_returns():
@@ -88,3 +102,46 @@ def recalculate_portfolio(body: RecalcInput):
 def get_recalculation_status():
     status = ray.get(progress_actor.get_status.remote())
     return JSONResponse(content=status)
+
+@router.get("/download/progress", summary="Obtener el progreso de la descarga de datos")
+def get_download_progress():
+    return {"progress": download_progress}
+
+@router.get("/compare", summary="Comparar rendimiento secuencial vs paralelo")
+def compare_performance():
+    print("Ejecutando pipeline secuencial...")
+    update_download_progress(25)  
+    cpu_before_secuencial = measure_cpu_usage()
+    start_time = time.time()
+    result_secuencial = run_pipeline_sequential()
+    secuencial_time = time.time() - start_time
+    cpu_after_secuencial = measure_cpu_usage()
+    print(f"Tiempo de ejecución secuencial: {secuencial_time:.2f} segundos")
+    print(f"Uso de CPU secuencial: {cpu_after_secuencial}%")
+    
+    update_download_progress(50) 
+
+    print("\nEjecutando pipeline paralelo...")
+    cpu_before_paralelo = measure_cpu_usage()
+    start_time = time.time()
+    result_paralelo = run_parallel_pipeline()
+    paralelo_time = time.time() - start_time
+    cpu_after_paralelo = measure_cpu_usage()
+    print(f"Tiempo de ejecución paralelo: {paralelo_time:.2f} segundos")
+    print(f"Uso de CPU paralelo: {cpu_after_paralelo}%")
+
+    update_download_progress(100)  
+
+   
+    comparison_result = {
+        "secuencial": {
+            "tiempo": secuencial_time,
+            "cpu": cpu_after_secuencial
+        },
+        "paralelo": {
+            "tiempo": paralelo_time,
+            "cpu": cpu_after_paralelo
+        }
+    }
+
+    return JSONResponse(content=comparison_result)
