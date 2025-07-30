@@ -5,8 +5,6 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      args:
-        VITE_API_URL: http://75.101.196.19:8000
     image: jgarcia9300/backend:latest
     ports:
       - "8000:8000"

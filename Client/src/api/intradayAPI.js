@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const intradayApi = axios.create({
-  baseURL: 'http://localhost:8000/intradaily/',
+  baseURL: 'http://54.235.46.202:8000/intradaily/',
 });
 
 export const runIntradayStrategy = async () => {

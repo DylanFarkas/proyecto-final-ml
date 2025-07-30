@@ -3,7 +3,7 @@ import axios from 'axios';
 const baseURL = import.meta.env.VITE_API_URL;
 
 const sentimentApi = axios.create({
-  baseURL: 'http://75.101.196.19:8000/sentiment/',
+  baseURL: 'http://54.235.46.202:8000/sentiment/',
 });
 
 console.log(baseURL);

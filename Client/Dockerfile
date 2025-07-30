@@ -2,10 +2,6 @@
 FROM node:18-alpine AS builder
 WORKDIR /app
 
-# --- Asegura que la variable ARG se define ---
-ARG VITE_API_URL
-ENV VITE_API_URL=$VITE_API_URL
-
 # Copiar archivos del frontend
 COPY . .
 
