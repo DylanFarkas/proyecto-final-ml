@@ -4,13 +4,14 @@ import { getComparisonIntradayData, getDownloadProgress as getIntradailyDownload
 import { getDownloadSentimentProgress } from '../api/sentimentAPI'; 
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import Swal from 'sweetalert2';
+import PageWrapper from '../components/common/PageWrapper';
 
 const BenchMarkingPage = () => {
     const [comparisonData, setComparisonData] = useState(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
     const [downloadProgress, setDownloadProgress] = useState(0); 
-    const [selectedApp, setSelectedApp] = useState("sentiment"); 
+    const [selectedApp, setSelectedApp] = useState("sentiment");
 
     const fetchComparisonData = async () => {
         setLoading(true);
@@ -96,7 +97,8 @@ const BenchMarkingPage = () => {
     ] : [];
 
     return (
-        <div className="p-6 bg-white dark:bg-gray-800 rounded-md shadow-md">
+        <PageWrapper pageName="Benchmarking">
+            <div className="p-6 bg-white dark:bg-gray-800 rounded-md shadow-md">
             <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-5">Benchmarking</h1>
 
             <label className="block text-sm font-medium text-gray-700 dark:text-white mb-2">Seleccionar Aplicación</label>
@@ -185,7 +187,8 @@ const BenchMarkingPage = () => {
                     </div>
                 </div>
             )}
-        </div>
+            </div>
+        </PageWrapper>
     );
 }
 

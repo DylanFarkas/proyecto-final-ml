@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { recalculatePortfolio } from "../../api/sentimentAPI";
-import Swal from 'sweetalert2';
+import { useAlert } from "../../contexts/AlertContext";
 
 const RecalculateForm = ({ onSuccess, onCriterioChange }) => {
     const [criterio, setCriterio] = useState(() => {
@@ -8,30 +8,26 @@ const RecalculateForm = ({ onSuccess, onCriterioChange }) => {
     });
     const [status, setStatus] = useState("");
     const [progress, setProgress] = useState(0);
-
     const [loading, setLoading] = useState(false);
+    const { showError, showSuccess } = useAlert();
 
     const handleRecalculate = async () => {
+        if (!criterio.trim()) {
+            showError("Por favor seleccione un criterio válido");
+            return;
+        }
+
         setLoading(true);
         try {
             const data = await recalculatePortfolio(criterio);
             onSuccess(data);
             onCriterioChange(criterio);
-            Swal.fire({
-                icon: "success",
-                title: "Portafolio recalculado con éxito",
-                text: `Se utilizó el criterio: ${criterio}`,
-                confirmButtonColor: "#2563eb",
-            }).then(() => {
+            showSuccess(`Portafolio recalculado con éxito usando el criterio: ${criterio}`);
+            setTimeout(() => {
                 window.location.reload();
-            });
-        } catch (err) {
-            Swal.fire({
-                icon: "error",
-                title: "Error al recalcular",
-                text: "Hubo un problema al procesar el nuevo portafolio.",
-                confirmButtonColor: "#dc2626",
-            });
+            }, 2000);
+        } catch (error) {
+            showError(error.message || "Error al recalcular el portafolio");
         } finally {
             setLoading(false);
         }
@@ -42,10 +38,12 @@ const RecalculateForm = ({ onSuccess, onCriterioChange }) => {
         if (loading) {
             interval = setInterval(async () => {
                 try {
-                    const res = await fetch("http://localhost:8000/sentiment/recalculate/status");
-                    const json = await res.json();
-                    setStatus(json.status);
-                    setProgress(json.progress);
+                    const res = await fetch("http://54.235.46.202:8000/sentiment/recalculate/status");
+                    if (res.ok) {
+                        const json = await res.json();
+                        setStatus(json.status || "Procesando...");
+                        setProgress(json.progress || 0);
+                    }
                 } catch (err) {
                     console.error("Error polling progreso:", err);
                 }
@@ -64,7 +62,9 @@ const RecalculateForm = ({ onSuccess, onCriterioChange }) => {
                 onChange={(e) => {
                     setCriterio(e.target.value);
                     localStorage.setItem("criterioActivo", e.target.value);
-                }} className="border rounded px-2 py-1 mr-4 cursor-pointer dark:bg-gray-800 text-gray-800 dark:text-gray-100 border-gray-300 dark:border-gray-600"
+                }} 
+                className="border rounded px-2 py-1 mr-4 cursor-pointer dark:bg-gray-800 text-gray-800 dark:text-gray-100 border-gray-300 dark:border-gray-600"
+                disabled={loading}
             >
                 <option value="engagement_ratio">Engagement Ratio</option>
                 <option value="twitterLikes">Twitter Likes</option>
@@ -72,8 +72,8 @@ const RecalculateForm = ({ onSuccess, onCriterioChange }) => {
             </select>
             <button
                 onClick={handleRecalculate}
-                disabled={loading}
-                className="bg-blue-600 text-white px-4 py-1 rounded cursor-pointer hover:bg-blue-700 disabled:opacity-50"
+                disabled={loading || !criterio.trim()}
+                className="bg-blue-600 text-white px-4 py-1 rounded cursor-pointer hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
             >
                 {loading ? "Calculando..." : "Recalcular Portafolio"}
             </button>
@@ -82,14 +82,11 @@ const RecalculateForm = ({ onSuccess, onCriterioChange }) => {
                 <div className="mt-2 text-sm text-gray-700 dark:text-gray-300">
                     {status} ({progress}%)
                     <div className="w-full bg-gray-200 rounded h-2 mt-1 dark:bg-gray-700">
-                        <div className="bg-blue-500 h-2 rounded" style={{ width: `${progress}%` }}></div>
+                        <div className="bg-blue-500 h-2 rounded transition-all duration-300" style={{ width: `${progress}%` }}></div>
                     </div>
                 </div>
             )}
-
         </div>
-
-
     );
 };
 

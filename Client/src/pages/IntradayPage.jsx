@@ -17,7 +17,8 @@ import {
   Legend,
   ResponsiveContainer,
 } from "recharts";
-import Swal from "sweetalert2"; 
+import { useAlert } from "../contexts/AlertContext";
+import PageWrapper from "../components/common/PageWrapper";
 
 const IntradayPage = () => {
   const [status, setStatus] = useState("");
@@ -26,49 +27,52 @@ const IntradayPage = () => {
   const [endDate, setEndDate] = useState("");
   const [returnsData, setReturnsData] = useState([]);
   const [tipoRetorno, setTipoRetorno] = useState("acumulado");
+  const [loading, setLoading] = useState(false);
+  const { showError, showSuccess, showWarning } = useAlert();
 
   const loadDates = async () => {
     try {
       const res = await getAvailableDates();
       setDates(res);
-    } catch (err) {
-      console.error("Error cargando fechas", err);
+    } catch (error) {
+      showError(error.message || "Error al cargar fechas disponibles");
     }
   };
 
   const handleRunStrategy = async () => {
+    setLoading(true);
     setStatus("Ejecutando estrategia...");
+    
     try {
       const res = await runIntradayStrategy();
       setStatus(res.message);
       await loadDates();
-
-      Swal.fire({
-        title: "¡Estrategia Ejecutada!",
-        text: "La estrategia intradía se ha ejecutado con éxito Seleccione las fechas para ver los resultados",
-        icon: "success",
-        confirmButtonText: "Aceptar",
-        confirmButtonColor: "#2563eb",
-      });
-    } catch {
+      showSuccess("Estrategia intradía ejecutada con éxito. Seleccione las fechas para ver los resultados.");
+    } catch (error) {
       setStatus("❌ Error al ejecutar la estrategia");
-
-      Swal.fire({
-        title: "¡Error!",
-        text: "Hubo un problema al ejecutar la estrategia intradía.",
-        icon: "error",
-        confirmButtonText: "Aceptar",
-      });
+      showError(error.message || "Error al ejecutar la estrategia intradía");
+    } finally {
+      setLoading(false);
     }
   };
 
   const loadReturns = async () => {
+    if (!startDate || !endDate) {
+      showWarning("Por favor seleccione fechas de inicio y fin");
+      return;
+    }
+
+    if (new Date(startDate) > new Date(endDate)) {
+      showError("La fecha de inicio debe ser anterior a la fecha de fin");
+      return;
+    }
+
     try {
       const fn = tipoRetorno === "diario" ? getDailyReturns : getReturns;
       const data = await fn(startDate, endDate);
       setReturnsData(data);
-    } catch (err) {
-      console.error("Error obteniendo retornos", err);
+    } catch (error) {
+      showError(error.message || "Error al obtener retornos");
     }
   };
 
@@ -80,27 +84,26 @@ const IntradayPage = () => {
     if (startDate && endDate) {
       loadReturns();
     }
-  }, [startDate, endDate]);
-
-  useEffect(() => {
-    if (startDate && endDate) {
-      loadReturns();
-    }
   }, [startDate, endDate, tipoRetorno]);
 
   return (
-    <div className="max-w-7xl mx-auto p-6 space-y-6">
+    <PageWrapper pageName="Intraday Strategy">
+      <div className="max-w-7xl mx-auto p-6 space-y-6">
       <h2 className="text-3xl font-bold text-blue-700 dark:text-white">
         Estrategia Intradía
       </h2>
 
       <button
         onClick={handleRunStrategy}
-        className="px-4 py-2 bg-green-600 cursor-pointer text-white rounded"
+        disabled={loading}
+        className="px-4 py-2 bg-green-600 cursor-pointer text-white rounded hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
       >
-        Ejecutar estrategia
+        {loading ? "Ejecutando estrategia..." : "Ejecutar Estrategia"}
       </button>
-      <p className="text-sm text-gray-600">{status}</p>
+      
+      {status && (
+        <p className="text-sm text-gray-600 dark:text-gray-400">{status}</p>
+      )}
 
       <div className="flex gap-4 items-center">
         <label className="text-sm text-gray-700 dark:text-gray-300">Tipo de retorno:</label>
@@ -108,6 +111,7 @@ const IntradayPage = () => {
           value={tipoRetorno}
           onChange={(e) => setTipoRetorno(e.target.value)}
           className="border px-2 py-1 rounded cursor-pointer dark:bg-gray-800 text-gray-800 dark:text-gray-100 border-gray-300 dark:border-gray-600"
+          disabled={loading}
         >
           <option value="acumulado">Acumulado (%)</option>
           <option value="diario">Diario (%)</option>
@@ -117,13 +121,14 @@ const IntradayPage = () => {
       {/* Filtros de fecha */}
       <div className="flex flex-wrap gap-4 items-center">
         <div>
-          <label className="mr-2">Inicio:</label>
+          <label className="mr-2 text-gray-700 dark:text-gray-300">Inicio:</label>
           <select
             value={startDate}
             onChange={(e) => setStartDate(e.target.value)}
             className="border px-2 py-1 rounded cursor-pointer dark:bg-gray-800 text-gray-800 dark:text-gray-100 border-gray-300 dark:border-gray-600"
+            disabled={loading}
           >
-            <option value="">Seleccionar</option>
+            <option value="">Seleccionar fecha de inicio</option>
             {dates.map((d) => (
               <option key={d} value={d}>
                 {d}
@@ -133,13 +138,14 @@ const IntradayPage = () => {
         </div>
 
         <div>
-          <label className="mr-2">Fin:</label>
+          <label className="mr-2 text-gray-700 dark:text-gray-300">Fin:</label>
           <select
             value={endDate}
             onChange={(e) => setEndDate(e.target.value)}
             className="border px-2 py-1 rounded cursor-pointer dark:bg-gray-800 text-gray-800 dark:text-gray-100 border-gray-300 dark:border-gray-600"
+            disabled={loading}
           >
-            <option value="">Seleccionar</option>
+            <option value="">Seleccionar fecha de fin</option>
             {dates.map((d) => (
               <option key={d} value={d}>
                 {d}
@@ -147,6 +153,15 @@ const IntradayPage = () => {
             ))}
           </select>
         </div>
+
+        {startDate && endDate && (
+          <button
+            onClick={loadReturns}
+            className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
+          >
+            Actualizar datos
+          </button>
+        )}
       </div>
 
       {/* Gráfico */}
@@ -191,7 +206,8 @@ const IntradayPage = () => {
           </LineChart>
         </ResponsiveContainer>
       </div>
-    </div>
+      </div>
+    </PageWrapper>
   );
 };
 
