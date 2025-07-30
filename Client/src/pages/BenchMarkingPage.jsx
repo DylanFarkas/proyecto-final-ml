@@ -45,12 +45,36 @@ const BenchMarkingPage = () => {
 
         } catch (error) {
             console.error('Error al obtener la comparación de rendimiento:', error);
-            setError('Hubo un error al obtener los datos.');
+            setError(error.message || 'Hubo un error al obtener los datos.');
+            
+            // Determinar el tipo de error para mostrar diferentes alertas
+            let errorTitle = "Error";
+            let errorIcon = "error";
+            let errorText = error.message || 'Hubo un problema al obtener los datos de la comparación';
+            
+            if (error.message?.includes('Timeout') || error.message?.includes('⏱️')) {
+                errorTitle = "Operación Lenta";
+                errorIcon = "warning";
+                errorText = error.message;
+            } else if (error.message?.includes('Archivo no encontrado') || error.message?.includes('📁')) {
+                errorTitle = "Archivos No Encontrados";
+                errorIcon = "info";
+                errorText = error.message;
+            } else if (error.message?.includes('Error de conexión') || error.message?.includes('🌐')) {
+                errorTitle = "Problema de Conexión";
+                errorIcon = "error";
+                errorText = error.message;
+            }
+            
             Swal.fire({
-                title: "¡Error!",
-                text: "Hubo un problema al obtener los datos de la comparación",
-                icon: "error",
-                confirmButtonText: "Aceptar"
+                title: errorTitle,
+                text: errorText,
+                icon: errorIcon,
+                confirmButtonText: "Aceptar",
+                confirmButtonColor: "#dc2626",
+                footer: selectedApp === "sentiment" ? 
+                    '<small>Asegúrese de que el archivo sentiment_data.csv esté disponible</small>' :
+                    '<small>Asegúrese de que los archivos de datos intradía estén disponibles</small>'
             });
         } finally {
             setLoading(false);
@@ -127,19 +151,59 @@ const BenchMarkingPage = () => {
                 Recalcular
             </button>
 
-            {error && <p className="mt-4 text-red-500">{error}</p>} {/* Muestra mensaje de error si existe */}
+            {/* Mostrar mensaje de error con más detalles */}
+            {error && (
+                <div className="mt-4 bg-red-50 dark:bg-red-900 border border-red-200 dark:border-red-700 rounded-md p-4">
+                    <div className="flex">
+                        <div className="flex-shrink-0">
+                            <span className="text-red-400">❌</span>
+                        </div>
+                        <div className="ml-3">
+                            <h3 className="text-sm font-medium text-red-800 dark:text-red-200">
+                                Error en el proceso de benchmarking
+                            </h3>
+                            <div className="mt-2 text-sm text-red-700 dark:text-red-300">
+                                <p>{error}</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Barra de progreso */}
             {loading && (
                 <div className="mt-4">
-                    <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">Descargando datos... Se ejecutará primero la versión secuencial y luego la paralela</h3>
+                    <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
+                        ⏳ Descargando datos... Se ejecutará primero la versión secuencial y luego la paralela
+                    </h3>
+                    <div className="bg-yellow-50 dark:bg-yellow-900 border border-yellow-200 dark:border-yellow-700 rounded-md p-4 mb-4">
+                        <div className="flex">
+                            <div className="flex-shrink-0">
+                                <span className="text-yellow-400">⚠️</span>
+                            </div>
+                            <div className="ml-3">
+                                <h3 className="text-sm font-medium text-yellow-800 dark:text-yellow-200">
+                                    Esta operación puede tardar varios minutos
+                                </h3>
+                                <div className="mt-2 text-sm text-yellow-700 dark:text-yellow-300">
+                                    <p>
+                                        • El benchmarking ejecuta ambos pipelines (secuencial y paralelo)<br/>
+                                        • Puede tardar hasta 3 minutos dependiendo de los datos<br/>
+                                        • Si la operación tarda demasiado, recibirá una notificación
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                     <div className="w-full bg-gray-200 rounded-full h-2.5">
                         <div
-                            className="bg-blue-600 h-2.5 rounded-full"
+                            className="bg-blue-600 h-2.5 rounded-full transition-all duration-300"
                             style={{ width: `${downloadProgress}%` }}
                         />
                     </div>
-                    <p className="text-sm text-gray-600 dark:text-gray-300">{downloadProgress}%</p>
+                    <p className="text-sm text-gray-600 dark:text-gray-300 mt-2">
+                        Progreso: {downloadProgress}% {downloadProgress < 50 ? '(Ejecutando versión secuencial...)' : '(Ejecutando versión paralela...)'}
+                    </p>
                 </div>
             )}
 

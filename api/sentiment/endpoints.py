@@ -14,7 +14,12 @@ import io
 from pydantic import BaseModel
 from ray_task.sentiment import run_pipeline
 from ray_task.sentiment import ProgressTracker
-from benchmarking.sentiment_compare import run_pipeline_sequential, run_parallel_pipeline
+from benchmarking.sentiment_compare import (
+    run_pipeline_sequential, 
+    run_parallel_pipeline,
+    run_pipeline_sequential_for_api,
+    run_parallel_pipeline_for_api
+)
 import logging
 
 # Configurar logging
@@ -191,41 +196,101 @@ def get_download_progress():
 @router.get("/compare", summary="Comparar rendimiento secuencial vs paralelo")
 def compare_performance():
     try:
+        logger.info("Iniciando comparación de rendimiento...")
+        
+        # Ejecutar pipeline secuencial
         print("Ejecutando pipeline secuencial...")
-        update_download_progress(25)  
+        update_download_progress(10)
         cpu_before_secuencial = measure_cpu_usage()
         start_time = time.time()
-        result_secuencial = run_pipeline_sequential()
-        secuencial_time = time.time() - start_time
-        cpu_after_secuencial = measure_cpu_usage()
-        print(f"Tiempo de ejecución secuencial: {secuencial_time:.2f} segundos")
-        print(f"Uso de CPU secuencial: {cpu_after_secuencial}%")
         
-        update_download_progress(50) 
+        try:
+            result_secuencial = run_pipeline_sequential_for_api()
+            secuencial_time = time.time() - start_time
+            cpu_after_secuencial = measure_cpu_usage()
+            print(f"Tiempo de ejecución secuencial: {secuencial_time:.2f} segundos")
+            print(f"Uso de CPU secuencial: {cpu_after_secuencial}%")
+            update_download_progress(50)
+        except TimeoutError as e:
+            logger.error(f"Timeout en pipeline secuencial: {e}")
+            raise HTTPException(
+                status_code=408, 
+                detail={
+                    "error": "timeout",
+                    "message": "El pipeline secuencial tardó demasiado en ejecutarse",
+                    "details": str(e)
+                }
+            )
+        except Exception as e:
+            logger.error(f"Error en pipeline secuencial: {e}")
+            raise HTTPException(
+                status_code=500,
+                detail={
+                    "error": "execution_error",
+                    "message": "Error durante la ejecución del pipeline secuencial",
+                    "details": str(e)
+                }
+            )
 
+        # Ejecutar pipeline paralelo
         print("\nEjecutando pipeline paralelo...")
         cpu_before_paralelo = measure_cpu_usage()
         start_time = time.time()
-        result_paralelo = run_parallel_pipeline()
-        paralelo_time = time.time() - start_time
-        cpu_after_paralelo = measure_cpu_usage()
-        print(f"Tiempo de ejecución paralelo: {paralelo_time:.2f} segundos")
-        print(f"Uso de CPU paralelo: {cpu_after_paralelo}%")
+        
+        try:
+            result_paralelo = run_parallel_pipeline_for_api()
+            paralelo_time = time.time() - start_time
+            cpu_after_paralelo = measure_cpu_usage()
+            print(f"Tiempo de ejecución paralelo: {paralelo_time:.2f} segundos")
+            print(f"Uso de CPU paralelo: {cpu_after_paralelo}%")
+            update_download_progress(100)
+        except TimeoutError as e:
+            logger.error(f"Timeout en pipeline paralelo: {e}")
+            raise HTTPException(
+                status_code=408,
+                detail={
+                    "error": "timeout",
+                    "message": "El pipeline paralelo tardó demasiado en ejecutarse",
+                    "details": str(e)
+                }
+            )
+        except Exception as e:
+            logger.error(f"Error en pipeline paralelo: {e}")
+            raise HTTPException(
+                status_code=500,
+                detail={
+                    "error": "execution_error", 
+                    "message": "Error durante la ejecución del pipeline paralelo",
+                    "details": str(e)
+                }
+            )
 
-        update_download_progress(100)  
-
+        # Preparar resultados
         comparison_result = {
             "secuencial": {
-                "tiempo": secuencial_time,
-                "cpu": cpu_after_secuencial
+                "tiempo": round(secuencial_time, 2),
+                "cpu": round(cpu_after_secuencial, 2)
             },
             "paralelo": {
-                "tiempo": paralelo_time,
-                "cpu": cpu_after_paralelo
-            }
+                "tiempo": round(paralelo_time, 2),
+                "cpu": round(cpu_after_paralelo, 2)
+            },
+            "mejora_velocidad": round(((secuencial_time - paralelo_time) / secuencial_time) * 100, 1) if secuencial_time > 0 else 0
         }
 
+        logger.info("Comparación de rendimiento completada exitosamente")
         return JSONResponse(content=comparison_result)
+        
+    except HTTPException:
+        # Re-lanzar las HTTPException para que mantengan su formato
+        raise
     except Exception as e:
-        logger.error(f"Error en comparación de rendimiento: {e}")
-        raise HTTPException(status_code=500, detail="Error interno del servidor en comparación de rendimiento")
+        logger.error(f"Error inesperado en comparación de rendimiento: {e}")
+        raise HTTPException(
+            status_code=500, 
+            detail={
+                "error": "unexpected_error",
+                "message": "Error inesperado durante la comparación de rendimiento",
+                "details": str(e)
+            }
+        )

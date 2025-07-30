@@ -23,9 +23,11 @@ class TimeoutManager:
         self.timeout_seconds = timeout_seconds
         self.should_continue = True
         self.timer = None
+        self.timeout_occurred = False
         
     def timeout_callback(self):
         """Callback que se ejecuta cuando se alcanza el timeout"""
+        self.timeout_occurred = True
         print(f"\n⚠️  ADVERTENCIA: La operación ha tardado más de {self.timeout_seconds} segundos.")
         print("Esto puede indicar que el proceso está tomando más tiempo del esperado.")
         
@@ -58,6 +60,31 @@ class TimeoutManager:
         if self.timer:
             self.timer.cancel()
 
+# Versión simplificada para uso en API (sin interacción de usuario)
+class ApiTimeoutManager:
+    def __init__(self, timeout_seconds=60):
+        self.timeout_seconds = timeout_seconds
+        self.timeout_occurred = False
+        self.timer = None
+        
+    def timeout_callback(self):
+        """Callback que se ejecuta cuando se alcanza el timeout"""
+        self.timeout_occurred = True
+        print(f"⚠️ TIMEOUT: La operación ha tardado más de {self.timeout_seconds} segundos.")
+        
+    def start_timer(self):
+        """Inicia el timer de timeout"""
+        if self.timer:
+            self.timer.cancel()
+        self.timer = threading.Timer(self.timeout_seconds, self.timeout_callback)
+        self.timer.daemon = True
+        self.timer.start()
+    
+    def stop_timer(self):
+        """Detiene el timer de timeout"""
+        if self.timer:
+            self.timer.cancel()
+
 def execute_with_timeout(func, timeout_seconds=30, *args, **kwargs):
     """
     Ejecuta una función con control de timeout interactivo (compatible con Windows)
@@ -76,6 +103,27 @@ def execute_with_timeout(func, timeout_seconds=30, *args, **kwargs):
     except Exception as e:
         timeout_manager.stop_timer()
         print(f"❌ Error durante la ejecución: {e}")
+        raise
+
+def execute_with_api_timeout(func, timeout_seconds=60, *args, **kwargs):
+    """
+    Ejecuta una función con control de timeout para APIs (sin interacción de usuario)
+    """
+    timeout_manager = ApiTimeoutManager(timeout_seconds)
+    timeout_manager.start_timer()
+    
+    try:
+        result = func(*args, **kwargs)
+        timeout_manager.stop_timer()
+        
+        if timeout_manager.timeout_occurred:
+            raise TimeoutError(f"La operación tardó más de {timeout_seconds} segundos en completarse")
+        
+        return result
+    except Exception as e:
+        timeout_manager.stop_timer()
+        if timeout_manager.timeout_occurred:
+            raise TimeoutError(f"La operación tardó más de {timeout_seconds} segundos y fue interrumpida")
         raise
 
 def cargar_datos_secuencial(path):
@@ -223,6 +271,21 @@ def benchmark_paralelo_with_timeout(path_diarios, path_intraday, timeout=30):
     """
     print(f"🚀 Iniciando benchmark paralelo (timeout: {timeout}s)...")
     return execute_with_timeout(benchmark_paralelo, timeout, path_diarios, path_intraday)
+
+# Funciones específicas para uso en API (sin interacción de usuario)
+def benchmark_secuencial_for_api(path_diarios, path_intraday, timeout=120):
+    """
+    Ejecuta el benchmark secuencial con control de timeout para API
+    """
+    print(f"🚀 Iniciando benchmark secuencial para API (timeout: {timeout}s)...")
+    return execute_with_api_timeout(benchmark_secuencial, timeout, path_diarios, path_intraday)
+
+def benchmark_paralelo_for_api(path_diarios, path_intraday, timeout=120):
+    """
+    Ejecuta el benchmark paralelo con control de timeout para API
+    """
+    print(f"🚀 Iniciando benchmark paralelo para API (timeout: {timeout}s)...")
+    return execute_with_api_timeout(benchmark_paralelo, timeout, path_diarios, path_intraday)
 
 # Ejecutar y comparar
 if __name__ == "__main__":

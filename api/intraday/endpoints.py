@@ -2,7 +2,12 @@ from fastapi import APIRouter, Query, HTTPException
 from datetime import datetime
 import numpy as np
 import pandas as pd
-from benchmarking.intraday_compare import benchmark_paralelo, benchmark_secuencial
+from benchmarking.intraday_compare import (
+    benchmark_paralelo, 
+    benchmark_secuencial,
+    benchmark_secuencial_for_api,
+    benchmark_paralelo_for_api
+)
 from ray_task.intraday import cargar_datos_diarios, cargar_datos_intradia, generar_senal_diaria, generar_senal_intradia, calcular_retorno_final
 from fastapi.responses import FileResponse, JSONResponse
 import tempfile
@@ -218,6 +223,8 @@ def get_download_progress():
 @router.get("/compare", summary="Comparación de rendimiento: Secuencial vs Paralelo")
 def benchmark():
     try:
+        logger.info("Iniciando comparación de rendimiento intraday...")
+        
         path_diarios = "datasets/simulated_daily_data.csv"
         path_intraday = "datasets/simulated_5min_data.csv"
         
@@ -227,34 +234,103 @@ def benchmark():
             pd.read_csv(path_intraday, nrows=1)
         except FileNotFoundError as e:
             logger.error(f"Archivo de datos no encontrado: {e}")
-            raise HTTPException(status_code=404, detail="Archivos de datos no encontrados")
+            raise HTTPException(
+                status_code=404, 
+                detail={
+                    "error": "file_not_found",
+                    "message": "Archivos de datos no encontrados",
+                    "details": str(e)
+                }
+            )
         
-        update_download_progress(50)  
+        # Ejecutar benchmark secuencial
+        update_download_progress(10)
         print("Midiendo el rendimiento secuencial...")
-        result_secuencial, secuencial_time, cpu_secuencial = benchmark_secuencial(path_diarios, path_intraday)
-       
-        update_download_progress(75)  
-        print("Midiendo el rendimiento paralelo...")
-        result_paralelo, paralelo_time, cpu_paralelo = benchmark_paralelo(path_diarios, path_intraday)
         
-        update_download_progress(100)  
+        try:
+            result_secuencial, secuencial_time, cpu_secuencial = benchmark_secuencial_for_api(
+                path_diarios, path_intraday
+            )
+            update_download_progress(50)
+        except TimeoutError as e:
+            logger.error(f"Timeout en benchmark secuencial: {e}")
+            raise HTTPException(
+                status_code=408,
+                detail={
+                    "error": "timeout",
+                    "message": "El benchmark secuencial tardó demasiado en ejecutarse",
+                    "details": str(e)
+                }
+            )
+        except Exception as e:
+            logger.error(f"Error en benchmark secuencial: {e}")
+            raise HTTPException(
+                status_code=500,
+                detail={
+                    "error": "execution_error",
+                    "message": "Error durante la ejecución del benchmark secuencial",
+                    "details": str(e)
+                }
+            )
+       
+        # Ejecutar benchmark paralelo
+        update_download_progress(75)
+        print("Midiendo el rendimiento paralelo...")
+        
+        try:
+            result_paralelo, paralelo_time, cpu_paralelo = benchmark_paralelo_for_api(
+                path_diarios, path_intraday
+            )
+            update_download_progress(100)
+        except TimeoutError as e:
+            logger.error(f"Timeout en benchmark paralelo: {e}")
+            raise HTTPException(
+                status_code=408,
+                detail={
+                    "error": "timeout",
+                    "message": "El benchmark paralelo tardó demasiado en ejecutarse",
+                    "details": str(e)
+                }
+            )
+        except Exception as e:
+            logger.error(f"Error en benchmark paralelo: {e}")
+            raise HTTPException(
+                status_code=500,
+                detail={
+                    "error": "execution_error",
+                    "message": "Error durante la ejecución del benchmark paralelo",
+                    "details": str(e)
+                }
+            )
+        
         print("Comparación de rendimiento completada.")
         
-        # Comparar resultados
+        # Preparar resultados
         comparison_data = {
             "secuencial": {
-                "tiempo": secuencial_time,
-                "cpu": cpu_secuencial
+                "tiempo": round(secuencial_time, 2),
+                "cpu": round(cpu_secuencial, 2)
             },
             "paralelo": {
-                "tiempo": paralelo_time,
-                "cpu": cpu_paralelo
-            }
+                "tiempo": round(paralelo_time, 2),
+                "cpu": round(cpu_paralelo, 2)
+            },
+            "mejora_velocidad": round(((secuencial_time - paralelo_time) / secuencial_time) * 100, 1) if secuencial_time > 0 else 0
         }
 
+        logger.info("Comparación de rendimiento intraday completada exitosamente")
         return JSONResponse(content=comparison_data)
+        
     except HTTPException:
+        # Re-lanzar las HTTPException para que mantengan su formato
         raise
     except Exception as e:
-        logger.error(f"Error en comparación de rendimiento: {e}")
-        raise HTTPException(status_code=500, detail="Error interno del servidor en comparación de rendimiento")
+        logger.error(f"Error inesperado en comparación de rendimiento: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "unexpected_error",
+                "message": "Error inesperado durante la comparación de rendimiento",
+                "details": str(e)
+            }
+        )

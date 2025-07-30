@@ -4,7 +4,7 @@ const baseURL = import.meta.env.VITE_API_URL;
 
 const sentimentApi = axios.create({
   baseURL: 'http://localhost:8000/sentiment/',
-  timeout: 30000, // 3 minutos de timeout
+  timeout: 180000, // 3 minutos de timeout para operaciones largas como benchmarking
 });
 
 // Añadir interceptor para requests
@@ -39,18 +39,39 @@ console.log(baseURL);
 const handleApiError = (error) => {
   if (error.response) {
     // Server responded with error status
-    const message = error.response.data?.detail || 'Error en el servidor';
+    const errorData = error.response.data;
+    
+    // Check if error has structured format from our API
+    if (errorData && typeof errorData === 'object' && errorData.error) {
+      const { error: errorType, message, details } = errorData;
+      
+      switch (errorType) {
+        case 'timeout':
+          throw new Error(`⏱️ Timeout: ${message}. La operación tardó demasiado en completarse.`);
+        case 'execution_error':
+          throw new Error(`❌ Error de ejecución: ${message}. Detalles: ${details}`);
+        case 'file_not_found':
+          throw new Error(`📁 Archivo no encontrado: ${message}. Verifique que los archivos de datos estén disponibles.`);
+        case 'unexpected_error':
+          throw new Error(`🚨 Error inesperado: ${message}. Detalles: ${details}`);
+        default:
+          throw new Error(`🔧 Error del servidor: ${message} (${error.response.status})`);
+      }
+    }
+    
+    // Fallback to old format
+    const message = errorData?.detail || errorData?.message || 'Error en el servidor';
     throw new Error(`${message} (${error.response.status})`);
   } else if (error.request) {
     // Network error - could be CORS or connection issue
     const errorMessage = error.message?.toLowerCase() || '';
     if (errorMessage.includes('cors') || errorMessage.includes('access-control-allow-origin')) {
-      throw new Error('Usuario no autorizado para realizar peticiones');
+      throw new Error('🚫 Usuario no autorizado para realizar peticiones');
     }
-    throw new Error('Error de conexión. Verifique su conexión a internet.');
+    throw new Error('🌐 Error de conexión. Verifique su conexión a internet.');
   } else {
     // Other error
-    throw new Error('Error inesperado. Intente nuevamente.');
+    throw new Error(`🔧 Error inesperado: ${error.message || 'Error desconocido'}`);
   }
 };
 
