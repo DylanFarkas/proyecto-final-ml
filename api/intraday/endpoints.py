@@ -2,12 +2,19 @@ from fastapi import APIRouter, Query
 from datetime import datetime
 import numpy as np
 import pandas as pd
+from benchmarking.intraday_compare import benchmark_paralelo, benchmark_secuencial
 from ray_task.intraday import cargar_datos_diarios, cargar_datos_intradia, generar_senal_diaria, generar_senal_intradia, calcular_retorno_final
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 import tempfile
 
 
 router = APIRouter(prefix="/intradaily")
+
+download_progress = 0 
+
+def update_download_progress(progress: int):
+    global download_progress
+    download_progress = progress
 
 @router.post("/run-strategy/")
 def run_intraday_strategy():
@@ -19,7 +26,7 @@ def run_intraday_strategy():
     final_df = calcular_retorno_final(final_df)
     
     final_df.to_csv("output/estrategia_intradia_resultado.csv")
-    return {"message": "✅ Estrategia ejecutada y guardada"}
+    return {"message": "Estrategia ejecutada y guardada"}
 
 @router.get("/dates")
 def available_dates():
@@ -36,16 +43,13 @@ def get_cumulative_returns(
     df = pd.read_csv("output/estrategia_intradia_resultado.csv", parse_dates=["datetime"])
     df["date"] = df["datetime"].dt.date
 
-    # Filtrar fechas si aplica
     if start_date:
         df = df[df["date"] >= datetime.strptime(start_date, "%Y-%m-%d").date()]
     if end_date:
         df = df[df["date"] <= datetime.strptime(end_date, "%Y-%m-%d").date()]
 
-    # Asegurar que los retornos están completos
     df["strategy_return"] = df["strategy_return"].fillna(0)
 
-    # Agrupar por día y calcular retorno acumulado exponencial
     daily_df = df.groupby("date")[["strategy_return"]].sum()
     daily_df["cumulative_strategy_return"] = np.exp(np.log1p(daily_df["strategy_return"]).cumsum()) - 1
     daily_df = daily_df.reset_index()
@@ -62,16 +66,13 @@ def get_daily_returns(
     df = pd.read_csv("output/estrategia_intradia_resultado.csv", parse_dates=["datetime"])
     df["date"] = df["datetime"].dt.date
 
-    # Filtrar fechas si aplica
     if start_date:
         df = df[df["date"] >= datetime.strptime(start_date, "%Y-%m-%d").date()]
     if end_date:
         df = df[df["date"] <= datetime.strptime(end_date, "%Y-%m-%d").date()]
 
-    # Agrupar por día
     daily_return_df = df.groupby("date")[["strategy_return"]].sum().reset_index()
 
-    # Convertir a porcentaje (opcional)
     daily_return_df["strategy_return"] = daily_return_df["strategy_return"] * 100
     daily_return_df["date"] = daily_return_df["date"].astype(str)
 
@@ -82,7 +83,7 @@ def get_daily_returns(
 def download_returns_csv(
     start_date: str = Query(None),
     end_date: str = Query(None),
-    tipo: str = Query("acumulado")  # "acumulado" o "diario"
+    tipo: str = Query("acumulado") 
 ):
     df = pd.read_csv("output/estrategia_intradia_resultado.csv", parse_dates=["datetime"])
     df["date"] = df["datetime"].dt.date
@@ -108,3 +109,38 @@ def download_returns_csv(
         result_df.to_csv(tmp.name, index=False)
         return FileResponse(tmp.name, filename=f"retornos_{tipo}.csv", media_type="text/csv")
 
+
+@router.get("/download/progress", summary="Obtener el progreso de la descarga de datos")
+def get_download_progress():
+    return {"progress": download_progress}
+
+
+@router.get("/compare", summary="Comparación de rendimiento: Secuencial vs Paralelo")
+def benchmark():
+    path_diarios = "datasets/simulated_daily_data.csv"
+    path_intraday = "datasets/simulated_5min_data.csv"
+    
+    update_download_progress(50)  
+    print("Midiendo el rendimiento secuencial...")
+    result_secuencial, secuencial_time, cpu_secuencial = benchmark_secuencial(path_diarios, path_intraday)
+   
+    update_download_progress(75)  
+    print("Midiendo el rendimiento paralelo...")
+    result_paralelo, paralelo_time, cpu_paralelo = benchmark_paralelo(path_diarios, path_intraday)
+    
+    update_download_progress(100)  
+    print("Comparación de rendimiento completada.")
+    
+    # Comparar resultados
+    comparison_data = {
+        "secuencial": {
+            "tiempo": secuencial_time,
+            "cpu": cpu_secuencial
+        },
+        "paralelo": {
+            "tiempo": paralelo_time,
+            "cpu": cpu_paralelo
+        }
+    }
+
+    return JSONResponse(content=comparison_data)

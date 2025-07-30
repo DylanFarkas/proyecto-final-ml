@@ -60,3 +60,23 @@ export const getDownloadLink = (startDate, endDate, tipoRetorno) => {
 
   return `http://localhost:8000/intradaily/returns/download?${params.toString()}`;
 };
+
+export const getComparisonIntradayData = async () => {
+    try {
+        const response = await intradayApi.get('/compare');
+        return response.data;
+    } catch (error) {
+        console.error('Error al obtener la comparación de rendimiento:', error);
+        throw error;
+    }
+};
+
+export const getDownloadProgress = async () => {
+    try {
+        const response = await intradayApi.get('download/progress'); // Llama al API para obtener el progreso
+        return response.data; // Retorna el progreso
+    } catch (error) {
+        console.error('Error obteniendo el progreso de descarga:', error);
+        throw error;
+    }
+};

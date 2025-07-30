@@ -4,6 +4,7 @@ import IntradayPage from "./pages/IntradayPage";
 import { Toaster } from "react-hot-toast";
 import { Moon, Sun } from "lucide-react";
 import "../index.css";
+import BenchMarkingPage from "./pages/BenchMarkingPage";
 
 const App = () => {
   const [activeTab, setActiveTab] = useState("sentiment");
@@ -43,7 +44,6 @@ const App = () => {
                 )}
               </button>
 
-
               <nav className="space-x-2">
                 <button
                   onClick={() => setActiveTab("sentiment")}
@@ -63,12 +63,23 @@ const App = () => {
                 >
                   Intraday
                 </button>
+                <button
+                  onClick={() => setActiveTab("benchmarking")}
+                  className={`px-3 py-2 rounded cursor-pointer ${activeTab === "benchmarking"
+                    ? "bg-blue-500 text-white"
+                    : "bg-gray-200 dark:bg-gray-700 dark:text-white"
+                    }`}
+                >
+                  Benchmarking
+                </button>
               </nav>
             </div>
           </header>
 
           <main className="p-6">
-            {activeTab === "sentiment" ? <SentimentPage /> : <IntradayPage />}
+            {activeTab === "sentiment" && <SentimentPage />}
+            {activeTab === "intraday" && <IntradayPage />}
+            {activeTab === "benchmarking" && <BenchMarkingPage />}
           </main>
         </div>
       </div>
