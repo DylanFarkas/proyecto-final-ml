@@ -5,7 +5,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: pruebabackend:latest
+    image: esteban93040/backend:latest
     ports:
       - "8000:8000"
     restart: always
@@ -14,9 +14,9 @@ services:
     build:
       context: ./Client
       dockerfile: Dockerfile
-    image: pruebafrontend:latest
+    image: esteban93040/frontend:latest
     ports:
-      - "5173:80"  # frontend será accesible desde http://localhost:5173 o la IP pública:5173
+      - "5173:80"  # frontend será accesible desde la IP pública:5173
     restart: always
     depends_on:
       - backend
