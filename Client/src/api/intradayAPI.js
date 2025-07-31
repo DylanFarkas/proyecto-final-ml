@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const intradayApi = axios.create({
-  baseURL: 'http://localhost:8000/intradaily/',
+  baseURL: 'http://54.156.132.114:8000/intradaily/',
   timeout: 180000, // 3 minutos de timeout para operaciones largas como benchmarking
 });
 
@@ -118,7 +118,7 @@ export const getDownloadLink = (startDate, endDate, tipoRetorno) => {
   if (endDate) params.append("end_date", endDate);
   params.append("tipo", tipoRetorno);
 
-  return `http://34.207.166.255:8000/intradaily/returns/download?${params.toString()}`;
+  return `http://54.156.132.114:8000/intradaily/returns/download?${params.toString()}`;
 };
 
 export const getComparisonIntradayData = async () => {
