@@ -62,7 +62,7 @@ def available_dates():
         logger.error(f"Error al obtener fechas: {e}")
         raise HTTPException(status_code=500, detail="Error interno del servidor al obtener fechas")
 
-@router.get("/returns", summary="Retorno acumulado de la estrategia (como el notebook)")
+@router.get("/returns", summary="Retorno acumulado de la estrategia")
 def get_cumulative_returns(
     start_date: str = Query(None), 
     end_date: str = Query(None)
