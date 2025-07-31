@@ -38,7 +38,7 @@ const RecalculateForm = ({ onSuccess, onCriterioChange }) => {
         if (loading) {
             interval = setInterval(async () => {
                 try {
-                    const res = await fetch("http://54.235.46.202:8000/sentiment/recalculate/status");
+                    const res = await fetch("http://localhost:8000/sentiment/recalculate/status");
                     if (res.ok) {
                         const json = await res.json();
                         setStatus(json.status || "Procesando...");

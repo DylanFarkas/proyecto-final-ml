@@ -7,9 +7,12 @@ import "../index.css";
 import BenchMarkingPage from "./pages/BenchMarkingPage";
 import { AlertProvider } from "./contexts/AlertContext";
 import ErrorBoundary from "./components/common/ErrorBoundary";
+import Guide from "./pages/Guide";
 
 const App = () => {
-  const [activeTab, setActiveTab] = useState("sentiment");
+  const [activeTab, setActiveTab] = useState(() => {
+    return localStorage.getItem("activeTab") || "guide";
+  });
   const [darkMode, setDarkMode] = useState(() => {
     return localStorage.theme === "dark" ||
       (!("theme" in localStorage) && window.matchMedia("(prefers-color-scheme: dark)").matches);
@@ -49,7 +52,16 @@ const App = () => {
 
                 <nav className="space-x-2">
                   <button
-                    onClick={() => setActiveTab("sentiment")}
+                    onClick={() => {setActiveTab("guide"); localStorage.setItem("activeTab", "guide")}}
+                    className={`px-3 py-2 rounded cursor-pointer ${activeTab === "guide"
+                      ? "bg-blue-500 text-white"
+                      : "bg-gray-200 dark:bg-gray-700 dark:text-white"
+                      }`}
+                  >
+                    Guía
+                  </button>
+                  <button
+                    onClick={() => { setActiveTab("sentiment"); localStorage.setItem("activeTab", "sentiment") }}
                     className={`px-3 py-2 rounded cursor-pointer ${activeTab === "sentiment"
                       ? "bg-blue-500 text-white"
                       : "bg-gray-200 dark:bg-gray-700 dark:text-white"
@@ -58,7 +70,7 @@ const App = () => {
                     Sentiment
                   </button>
                   <button
-                    onClick={() => setActiveTab("intraday")}
+                    onClick={() => {setActiveTab("intraday"); localStorage.setItem("activeTab", "intraday")}}
                     className={`px-3 py-2 rounded cursor-pointer ${activeTab === "intraday"
                       ? "bg-blue-500 text-white"
                       : "bg-gray-200 dark:bg-gray-700 dark:text-white"
@@ -67,7 +79,7 @@ const App = () => {
                     Intraday
                   </button>
                   <button
-                    onClick={() => setActiveTab("benchmarking")}
+                    onClick={() => {setActiveTab("benchmarking"); localStorage.setItem("activeTab", "benchmarking")}}
                     className={`px-3 py-2 rounded cursor-pointer ${activeTab === "benchmarking"
                       ? "bg-blue-500 text-white"
                       : "bg-gray-200 dark:bg-gray-700 dark:text-white"
@@ -80,6 +92,9 @@ const App = () => {
             </header>
 
             <main className="p-6">
+              <ErrorBoundary>
+                {activeTab === "guide" && <Guide />}
+              </ErrorBoundary>
               <ErrorBoundary>
                 {activeTab === "sentiment" && <SentimentPage />}
               </ErrorBoundary>

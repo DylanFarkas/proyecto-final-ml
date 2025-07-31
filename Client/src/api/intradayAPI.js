@@ -118,7 +118,7 @@ export const getDownloadLink = (startDate, endDate, tipoRetorno) => {
   if (endDate) params.append("end_date", endDate);
   params.append("tipo", tipoRetorno);
 
-  return `http://54.235.46.202:8000/intradaily/returns/download?${params.toString()}`;
+  return `http://localhost:8000/intradaily/returns/download?${params.toString()}`;
 };
 
 export const getComparisonIntradayData = async () => {

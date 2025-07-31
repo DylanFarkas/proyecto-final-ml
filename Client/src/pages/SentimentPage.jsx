@@ -17,13 +17,16 @@ const SentimentPage = () => {
   return (
     <PageWrapper pageName="Sentiment Analysis">
       <div className="space-y-8 max-w-7xl mx-auto">
-        <h2 className="text-3xl font-bold text-blue-800 mt-4 dark:text-white">
-          Análisis de Sentimiento Financiero
-        </h2>
+        <div className="flex justify-between items-center dark:bg-gray-800 p-4 rounded-md shadow">
+          <h2 className="text-3xl font-bold text-blue-800 mt-4 dark:text-white">
+            Análisis de Sentimiento Financiero
+          </h2>
 
-        <h3 className="text-xl font-medium text-gray-600 dark:text-gray-300">
-          Criterio actual: <span className="text-black dark:text-white font-semibold">{criterioActivo}</span>
-        </h3>
+          <h3 className="text-xl font-medium text-gray-600 dark:text-gray-300">
+            Criterio actual: <span className="text-black dark:text-white font-semibold">{criterioActivo}</span>
+          </h3>
+
+        </div>
 
         <RecalculateForm
           onSuccess={() => { }}
