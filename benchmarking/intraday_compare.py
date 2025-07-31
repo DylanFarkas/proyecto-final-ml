@@ -11,7 +11,7 @@ from ta.momentum import RSIIndicator
 from ta.volatility import BollingerBands
 from arch import arch_model
 
-from ray_task.intraday import cargar_datos_intradia, predecir_varianza_garch, generar_senal_diaria, generar_senal_intradia, calcular_retorno_final, cargar_datos_diarios
+from ray_task.intraday import load_intraday_data, predict_variance_garch, generate_daily_signal, generate_signal_intradia, calculate_final_return, load_daily_data
 
 def measure_cpu_usage(interval=1, duration=3):
     cpu_readings = [psutil.cpu_percent(interval=interval) for _ in range(duration)]
@@ -126,7 +126,7 @@ def execute_with_api_timeout(func, timeout_seconds=60, *args, **kwargs):
             raise TimeoutError(f"La operación tardó más de {timeout_seconds} segundos y fue interrumpida")
         raise
 
-def cargar_datos_secuencial(path):
+def load_secuential_data(path):
     df = pd.read_csv(path)
     df = df.loc[:, ~df.columns.str.contains('^Unnamed')]
     df['Date'] = pd.to_datetime(df['Date'])
@@ -134,7 +134,7 @@ def cargar_datos_secuencial(path):
     df['log_ret'] = np.log(df['Adj Close']).diff()
     return df
 
-def generar_senal_diaria_secuencial(df):
+def generate_daily_signal_secuencial(df):
     df = df.copy()
     df['variance'] = df['log_ret'].rolling(180).var()
     df = df['2020-01-01':].copy()
@@ -155,7 +155,7 @@ def generar_senal_diaria_secuencial(df):
     df['signal_daily'] = df['signal_daily'].shift()
     return df
 
-def generar_senal_intradia_secuencial(intraday_df, senales_diarias):
+def generate_signal_intradia_secuencial(intraday_df, senales_diarias):
     df = intraday_df.reset_index()\
             .merge(senales_diarias[['signal_daily']].reset_index(), left_on='date', right_on='Date')\
             .set_index('datetime')
@@ -178,7 +178,7 @@ def generar_senal_intradia_secuencial(intraday_df, senales_diarias):
 
     df['signal_intraday'] = df.apply(signal, axis=1)
 
-    def combinacion(row):
+    def combination(row):
         if row['signal_daily'] == 1 and row['signal_intraday'] == 1:
             return -1
         elif row['signal_daily'] == -1 and row['signal_intraday'] == -1:
@@ -186,11 +186,11 @@ def generar_senal_intradia_secuencial(intraday_df, senales_diarias):
         else:
             return np.nan
 
-    df['return_sign'] = df.apply(combinacion, axis=1)
+    df['return_sign'] = df.apply(combination, axis=1)
     df['return_sign'] = df.groupby(pd.Grouper(freq='D'))['return_sign'].transform(lambda x: x.ffill())
     return df
 
-def calcular_retorno_final_secuencial(df):
+def calculate_final_return_secuencial(df):
     df = df.copy()
     df['return'] = df['close'].pct_change()
     df['forward_return'] = df['return'].shift(-1)
@@ -201,22 +201,22 @@ def calcular_retorno_final_secuencial(df):
 
 # Benchmarking
 
-def run_pipeline_secuencial(path_diarios, path_intraday):
-    df_diarios = cargar_datos_secuencial(path_diarios)
-    df_intraday = cargar_datos_intradia(path_intraday)
-    df_senales_diarias = generar_senal_diaria_secuencial(df_diarios)
-    df_senales_intraday = generar_senal_intradia_secuencial(df_intraday, df_senales_diarias)
-    df_retorno = calcular_retorno_final_secuencial(df_senales_intraday)
+def run_pipeline_sequential(path_diarios, path_intraday):
+    df_diarios = load_secuential_data(path_diarios)
+    df_intraday = load_intraday_data(path_intraday)
+    df_senales_diarias = generate_daily_signal_secuencial(df_diarios)
+    df_senales_intraday = generate_signal_intradia_secuencial(df_intraday, df_senales_diarias)
+    df_retorno = calculate_final_return_secuencial(df_senales_intraday)
     
     return df_retorno
 
-def benchmark_secuencial(path_diarios, path_intraday):
+def benchmark_sequential(path_diarios, path_intraday):
     print("Midiendo el uso de CPU antes de la ejecución (sec) ...")
     cpu_before = measure_cpu_usage()  
     print(f"Uso de CPU antes: {cpu_before:.2f}%")
     
     start_time = time.time()
-    result_secuencial = run_pipeline_secuencial(path_diarios, path_intraday)
+    result_secuencial = run_pipeline_sequential(path_diarios, path_intraday)
     secuencial_time = time.time() - start_time
     
     print("Midiendo el uso de CPU después de la ejecución (sec) ...")
@@ -231,15 +231,15 @@ def benchmark_secuencial(path_diarios, path_intraday):
 def run_parallel_pipeline(path_diarios, path_intraday):
     ray.init(ignore_reinit_error=True)
     
-    df_diarios = cargar_datos_diarios(path_diarios)  
-    df_intraday = cargar_datos_intradia(path_intraday)
-    df_senales_diarias = generar_senal_diaria(df_diarios)
-    df_senales_intraday = generar_senal_intradia(df_intraday, df_senales_diarias)
-    df_retorno = calcular_retorno_final(df_senales_intraday)
+    df_diarios = load_daily_data(path_diarios)  
+    df_intraday = load_intraday_data(path_intraday)
+    df_senales_diarias = generate_daily_signal(df_diarios)
+    df_senales_intraday = generate_signal_intradia(df_intraday, df_senales_diarias)
+    df_retorno = calculate_final_return(df_senales_intraday)
     
     return df_retorno
 
-def benchmark_paralelo(path_diarios, path_intraday):
+def benchmark_parallel(path_diarios, path_intraday):
     print("Midiendo el uso de CPU antes de la ejecución (par) ...")
     cpu_before = measure_cpu_usage() 
     print(f"Uso de CPU antes: {cpu_before:.2f}%")
@@ -258,34 +258,34 @@ def benchmark_paralelo(path_diarios, path_intraday):
     return result_paralelo, paralelo_time, cpu_after
 
 # Funciones wrapper con control de timeout
-def benchmark_secuencial_with_timeout(path_diarios, path_intraday, timeout=30):
+def benchmark_sequential_with_timeout(path_diarios, path_intraday, timeout=30):
     """
     Ejecuta el benchmark secuencial con control de timeout
     """
     print(f"🚀 Iniciando benchmark secuencial (timeout: {timeout}s)...")
-    return execute_with_timeout(benchmark_secuencial, timeout, path_diarios, path_intraday)
+    return execute_with_timeout(benchmark_sequential, timeout, path_diarios, path_intraday)
 
-def benchmark_paralelo_with_timeout(path_diarios, path_intraday, timeout=30):
+def benchmark_parallel_with_timeout(path_diarios, path_intraday, timeout=30):
     """
     Ejecuta el benchmark paralelo con control de timeout
     """
     print(f"🚀 Iniciando benchmark paralelo (timeout: {timeout}s)...")
-    return execute_with_timeout(benchmark_paralelo, timeout, path_diarios, path_intraday)
+    return execute_with_timeout(benchmark_parallel, timeout, path_diarios, path_intraday)
 
 # Funciones específicas para uso en API (sin interacción de usuario)
-def benchmark_secuencial_for_api(path_diarios, path_intraday, timeout=120):
+def benchmark_sequential_for_api(path_diarios, path_intraday, timeout=120):
     """
     Ejecuta el benchmark secuencial con control de timeout para API
     """
     print(f"🚀 Iniciando benchmark secuencial para API (timeout: {timeout}s)...")
-    return execute_with_api_timeout(benchmark_secuencial, timeout, path_diarios, path_intraday)
+    return execute_with_api_timeout(benchmark_sequential, timeout, path_diarios, path_intraday)
 
-def benchmark_paralelo_for_api(path_diarios, path_intraday, timeout=120):
+def benchmark_parallel_for_api(path_diarios, path_intraday, timeout=120):
     """
     Ejecuta el benchmark paralelo con control de timeout para API
     """
     print(f"🚀 Iniciando benchmark paralelo para API (timeout: {timeout}s)...")
-    return execute_with_api_timeout(benchmark_paralelo, timeout, path_diarios, path_intraday)
+    return execute_with_api_timeout(benchmark_parallel, timeout, path_diarios, path_intraday)
 
 # Ejecutar y comparar
 if __name__ == "__main__":
@@ -305,13 +305,13 @@ if __name__ == "__main__":
     try:
         # Benchmarking secuencial
         print("\n📈 EJECUTANDO BENCHMARK SECUENCIAL...")
-        result_secuencial, secuencial_time, cpu_secuencial = benchmark_secuencial_with_timeout(
+        result_secuencial, secuencial_time, cpu_secuencial = benchmark_sequential_with_timeout(
             path_diarios, path_intraday, timeout=TIMEOUT_SECONDS
         )
 
         # Benchmarking paralelo
         print("\n🚀 EJECUTANDO BENCHMARK PARALELO...")
-        result_paralelo, paralelo_time, cpu_paralelo = benchmark_paralelo_with_timeout(
+        result_paralelo, paralelo_time, cpu_paralelo = benchmark_parallel_with_timeout(
             path_diarios, path_intraday, timeout=TIMEOUT_SECONDS
         )
 

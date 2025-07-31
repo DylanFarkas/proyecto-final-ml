@@ -3,12 +3,12 @@ from datetime import datetime
 import numpy as np
 import pandas as pd
 from benchmarking.intraday_compare import (
-    benchmark_paralelo, 
-    benchmark_secuencial,
-    benchmark_secuencial_for_api,
-    benchmark_paralelo_for_api
+    benchmark_parallel, 
+    benchmark_sequential,
+    benchmark_sequential_for_api,
+    benchmark_parallel_for_api
 )
-from ray_task.intraday import cargar_datos_diarios, cargar_datos_intradia, generar_senal_diaria, generar_senal_intradia, calcular_retorno_final
+from ray_task.intraday import load_daily_data, load_intraday_data, generate_daily_signal, generate_signal_intradia, calculate_final_return
 from fastapi.responses import FileResponse, JSONResponse
 import tempfile
 import logging
@@ -29,12 +29,12 @@ def update_download_progress(progress: int):
 @router.post("/run-strategy/")
 def run_intraday_strategy():
     try:
-        daily_df = cargar_datos_diarios("datasets/simulated_daily_data.csv")
-        intraday_df = cargar_datos_intradia("datasets/simulated_5min_data.csv")
+        daily_df = load_daily_data("datasets/simulated_daily_data.csv")
+        intraday_df = load_intraday_data("datasets/simulated_5min_data.csv")
 
-        daily_df = generar_senal_diaria(daily_df)
-        final_df = generar_senal_intradia(intraday_df, daily_df)
-        final_df = calcular_retorno_final(final_df)
+        daily_df = generate_daily_signal(daily_df)
+        final_df = generate_signal_intradia(intraday_df, daily_df)
+        final_df = calculate_final_return(final_df)
         
         final_df.to_csv("output/estrategia_intradia_resultado.csv")
         return {"message": "Estrategia ejecutada y guardada"}
@@ -248,7 +248,7 @@ def benchmark():
         print("Midiendo el rendimiento secuencial...")
         
         try:
-            result_secuencial, secuencial_time, cpu_secuencial = benchmark_secuencial_for_api(
+            result_secuencial, secuencial_time, cpu_secuencial = benchmark_sequential_for_api(
                 path_diarios, path_intraday
             )
             update_download_progress(50)
@@ -278,7 +278,7 @@ def benchmark():
         print("Midiendo el rendimiento paralelo...")
         
         try:
-            result_paralelo, paralelo_time, cpu_paralelo = benchmark_paralelo_for_api(
+            result_paralelo, paralelo_time, cpu_paralelo = benchmark_parallel_for_api(
                 path_diarios, path_intraday
             )
             update_download_progress(100)
