@@ -6,11 +6,11 @@
 - [⚙️ Tecnologías utilizadas](#️-tecnologías-utilizadas)
 - [🧪 Requisitos](#-requisitos)
 - [🖼️ Vista previa](#️-vista-previa)
-- [📁 Estructura del Proyecto](#-estructura-del-proyecto)
 - [🔌 Endpoints Principales](#-endpoints-principales)
+- [🐳 Ejecución con Docker](#-ejecución-con-docker)
 - [💻 Instalación local](#-instalación-local)
 - [🚀 Ejecución local](#-ejecución-local)
-- [🐳 Ejecución con Docker](#-ejecución-con-docker)
+- [👨‍💻 Desarrolladores](#️-desarrolladores)
 
 ---
 
@@ -47,26 +47,7 @@ Está desarrollado con una arquitectura de microservicios, procesamiento paralel
 ## 🖼️ Vista previa
 ![image](https://res.cloudinary.com/dprzfeoj8/image/upload/v1753935042/app-preview_ddq49a.png)
 
----
 
-## 📁 Estructura del Proyecto
-
-proyecto-final-ml/
-├── api/                    - Backend FastAPI + Ray
-│   └── main.py
-├── benchmarking/           - Scripts de benchmarking
-├── Client/                 - Frontend en React + TailwindCSS
-│   ├── src/
-│   │   ├── components/
-│   │   └── pages/
-│   └── Dockerfile  
-├── datasets/               - Datos simulados de entrada
-├── output/                 - Resultados generados
-├── ray_task/               - Tareas paralelas en Ray
-├── docker-compose.yml      - Contenedores backend + frontend
-├── Dockerfile              - Contenedores backend + frontend
-└── README.md
- 
 ---
 
 ## 🔌 Endpoints Principales
