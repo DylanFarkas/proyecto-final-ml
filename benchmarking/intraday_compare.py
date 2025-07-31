@@ -4,6 +4,9 @@ import ray
 import pandas as pd
 import numpy as np
 import psutil
+import threading
+import os
+import sys
 from ta.momentum import RSIIndicator
 from ta.volatility import BollingerBands
 from arch import arch_model
@@ -13,6 +16,115 @@ from ray_task.intraday import cargar_datos_intradia, predecir_varianza_garch, ge
 def measure_cpu_usage(interval=1, duration=3):
     cpu_readings = [psutil.cpu_percent(interval=interval) for _ in range(duration)]
     return np.mean(cpu_readings)
+
+# Función para manejar timeout y consultar al usuario (compatible con Windows)
+class TimeoutManager:
+    def __init__(self, timeout_seconds=30):
+        self.timeout_seconds = timeout_seconds
+        self.should_continue = True
+        self.timer = None
+        self.timeout_occurred = False
+        
+    def timeout_callback(self):
+        """Callback que se ejecuta cuando se alcanza el timeout"""
+        self.timeout_occurred = True
+        print(f"\n⚠️  ADVERTENCIA: La operación ha tardado más de {self.timeout_seconds} segundos.")
+        print("Esto puede indicar que el proceso está tomando más tiempo del esperado.")
+        
+        try:
+            response = input("¿Desea continuar con la ejecución? (s/n): ").lower().strip()
+            if response in ['n', 'no']:
+                print("🛑 Operación cancelada por el usuario.")
+                self.should_continue = False
+                # Forzar la salida del programa
+                os._exit(1)
+            else:
+                print("✅ Continuando con la ejecución...")
+                # Reiniciar el timer para el siguiente check
+                self.start_timer()
+        except (KeyboardInterrupt, EOFError):
+            print("\n🛑 Operación interrumpida por el usuario.")
+            self.should_continue = False
+            os._exit(1)
+    
+    def start_timer(self):
+        """Inicia el timer de timeout"""
+        if self.timer:
+            self.timer.cancel()
+        self.timer = threading.Timer(self.timeout_seconds, self.timeout_callback)
+        self.timer.daemon = True
+        self.timer.start()
+    
+    def stop_timer(self):
+        """Detiene el timer de timeout"""
+        if self.timer:
+            self.timer.cancel()
+
+# Versión simplificada para uso en API (sin interacción de usuario)
+class ApiTimeoutManager:
+    def __init__(self, timeout_seconds=60):
+        self.timeout_seconds = timeout_seconds
+        self.timeout_occurred = False
+        self.timer = None
+        
+    def timeout_callback(self):
+        """Callback que se ejecuta cuando se alcanza el timeout"""
+        self.timeout_occurred = True
+        print(f"⚠️ TIMEOUT: La operación ha tardado más de {self.timeout_seconds} segundos.")
+        
+    def start_timer(self):
+        """Inicia el timer de timeout"""
+        if self.timer:
+            self.timer.cancel()
+        self.timer = threading.Timer(self.timeout_seconds, self.timeout_callback)
+        self.timer.daemon = True
+        self.timer.start()
+    
+    def stop_timer(self):
+        """Detiene el timer de timeout"""
+        if self.timer:
+            self.timer.cancel()
+
+def execute_with_timeout(func, timeout_seconds=30, *args, **kwargs):
+    """
+    Ejecuta una función con control de timeout interactivo (compatible con Windows)
+    """
+    timeout_manager = TimeoutManager(timeout_seconds)
+    timeout_manager.start_timer()
+    
+    try:
+        result = func(*args, **kwargs)
+        timeout_manager.stop_timer()
+        return result
+    except KeyboardInterrupt:
+        timeout_manager.stop_timer()
+        print("\n🛑 Operación interrumpida por el usuario.")
+        sys.exit(1)
+    except Exception as e:
+        timeout_manager.stop_timer()
+        print(f"❌ Error durante la ejecución: {e}")
+        raise
+
+def execute_with_api_timeout(func, timeout_seconds=60, *args, **kwargs):
+    """
+    Ejecuta una función con control de timeout para APIs (sin interacción de usuario)
+    """
+    timeout_manager = ApiTimeoutManager(timeout_seconds)
+    timeout_manager.start_timer()
+    
+    try:
+        result = func(*args, **kwargs)
+        timeout_manager.stop_timer()
+        
+        if timeout_manager.timeout_occurred:
+            raise TimeoutError(f"La operación tardó más de {timeout_seconds} segundos en completarse")
+        
+        return result
+    except Exception as e:
+        timeout_manager.stop_timer()
+        if timeout_manager.timeout_occurred:
+            raise TimeoutError(f"La operación tardó más de {timeout_seconds} segundos y fue interrumpida")
+        raise
 
 def cargar_datos_secuencial(path):
     df = pd.read_csv(path)
@@ -145,38 +257,128 @@ def benchmark_paralelo(path_diarios, path_intraday):
     
     return result_paralelo, paralelo_time, cpu_after
 
+# Funciones wrapper con control de timeout
+def benchmark_secuencial_with_timeout(path_diarios, path_intraday, timeout=30):
+    """
+    Ejecuta el benchmark secuencial con control de timeout
+    """
+    print(f"🚀 Iniciando benchmark secuencial (timeout: {timeout}s)...")
+    return execute_with_timeout(benchmark_secuencial, timeout, path_diarios, path_intraday)
+
+def benchmark_paralelo_with_timeout(path_diarios, path_intraday, timeout=30):
+    """
+    Ejecuta el benchmark paralelo con control de timeout
+    """
+    print(f"🚀 Iniciando benchmark paralelo (timeout: {timeout}s)...")
+    return execute_with_timeout(benchmark_paralelo, timeout, path_diarios, path_intraday)
+
+# Funciones específicas para uso en API (sin interacción de usuario)
+def benchmark_secuencial_for_api(path_diarios, path_intraday, timeout=120):
+    """
+    Ejecuta el benchmark secuencial con control de timeout para API
+    """
+    print(f"🚀 Iniciando benchmark secuencial para API (timeout: {timeout}s)...")
+    return execute_with_api_timeout(benchmark_secuencial, timeout, path_diarios, path_intraday)
+
+def benchmark_paralelo_for_api(path_diarios, path_intraday, timeout=120):
+    """
+    Ejecuta el benchmark paralelo con control de timeout para API
+    """
+    print(f"🚀 Iniciando benchmark paralelo para API (timeout: {timeout}s)...")
+    return execute_with_api_timeout(benchmark_paralelo, timeout, path_diarios, path_intraday)
+
 # Ejecutar y comparar
 if __name__ == "__main__":
+    # Configuración de timeout (en segundos)
+    TIMEOUT_SECONDS = 30
+    
+    print("=" * 60)
+    print("🔄 INICIANDO BENCHMARKING DE ESTRATEGIA INTRADIA")
+    print("=" * 60)
+    print(f"⏱️  Timeout configurado: {TIMEOUT_SECONDS} segundos")
+    print(f"📊 Se ejecutarán ambos pipelines (secuencial y paralelo)")
+    print("=" * 60)
+    
     path_diarios = "datasets/simulated_daily_data.csv"
     path_intraday = "datasets/simulated_5min_data.csv"
     
-    # Benchmarking secuencial
-    result_secuencial, secuencial_time, cpu_secuencial = benchmark_secuencial(path_diarios, path_intraday)
+    try:
+        # Benchmarking secuencial
+        print("\n📈 EJECUTANDO BENCHMARK SECUENCIAL...")
+        result_secuencial, secuencial_time, cpu_secuencial = benchmark_secuencial_with_timeout(
+            path_diarios, path_intraday, timeout=TIMEOUT_SECONDS
+        )
 
-    # Benchmarking paralelo
-    result_paralelo, paralelo_time, cpu_paralelo = benchmark_paralelo(path_diarios, path_intraday)
+        # Benchmarking paralelo
+        print("\n🚀 EJECUTANDO BENCHMARK PARALELO...")
+        result_paralelo, paralelo_time, cpu_paralelo = benchmark_paralelo_with_timeout(
+            path_diarios, path_intraday, timeout=TIMEOUT_SECONDS
+        )
 
-    # Compararamos resultados
-    print("\nComparación de resultados:")
-    print(f"Tiempo secuencial: {secuencial_time:.2f} segundos")
-    print(f"Uso de CPU secuencial: {cpu_secuencial:.2f}%")
-    print(f"Tiempo paralelo: {paralelo_time:.2f} segundos")
-    print(f"Uso de CPU paralelo: {cpu_paralelo:.2f}%")
+        # Comparar resultados
+        print("\n" + "=" * 60)
+        print("📊 RESUMEN DE COMPARACIÓN:")
+        print("=" * 60)
+        print(f"⏱️  Tiempo secuencial: {secuencial_time:.2f} segundos")
+        print(f"💻 Uso de CPU secuencial: {cpu_secuencial:.2f}%")
+        print(f"⏱️  Tiempo paralelo: {paralelo_time:.2f} segundos")
+        print(f"💻 Uso de CPU paralelo: {cpu_paralelo:.2f}%")
+        
+        # Calcular mejoras
+        speed_improvement = ((secuencial_time - paralelo_time) / secuencial_time) * 100
+        print(f"🚀 Mejora de velocidad: {speed_improvement:.1f}%")
+        
+        if speed_improvement > 0:
+            print(f"✅ El pipeline paralelo es {speed_improvement:.1f}% más rápido")
+        else:
+            print(f"⚠️  El pipeline secuencial fue {abs(speed_improvement):.1f}% más rápido")
 
-    # Crear gráfico comparativo
-    fig, ax1 = plt.subplots(figsize=(8, 6))
+        # Crear gráfico comparativo mejorado
+        print("\n📈 Generando gráficos comparativos...")
+        fig, ax1 = plt.subplots(figsize=(10, 6))
 
-    # Gráfico de tiempos de ejecución
-    ax1.bar(["Secuencial", "Paralelo"], [secuencial_time, paralelo_time], color='blue', alpha=0.6, label="Tiempo de Ejecución", width=0.4, align='center')
-    ax1.set_ylabel("Tiempo (segundos)", color='blue')
-    ax1.set_xlabel("Método")
+        # Gráfico de tiempos de ejecución
+        bars = ax1.bar(["Secuencial", "Paralelo"], [secuencial_time, paralelo_time], 
+                      color=['skyblue', 'lightgreen'], alpha=0.7, 
+                      label="Tiempo de Ejecución", width=0.4, align='center')
+        ax1.set_ylabel("Tiempo (segundos)", color='blue', fontsize=12)
+        ax1.set_xlabel("Método", fontsize=12)
+        ax1.tick_params(axis='y', labelcolor='blue')
 
-    ax2 = ax1.twinx()
-    ax2.plot(["Secuencial", "Paralelo"], [cpu_secuencial, cpu_paralelo], color='red', marker='o', label="Uso de CPU (%)", linewidth=2)
-    ax2.set_ylabel("Uso de CPU (%)", color='red')
+        # Agregar valores en las barras
+        for bar, tiempo in zip(bars, [secuencial_time, paralelo_time]):
+            height = bar.get_height()
+            ax1.text(bar.get_x() + bar.get_width()/2., height + 0.1,
+                    f'{tiempo:.2f}s', ha='center', va='bottom', fontweight='bold')
 
-    plt.title("Comparación de Tiempos de Ejecución y Uso de CPU: Secuencial vs Paralelo")
-    ax1.legend(loc="upper left")
-    ax2.legend(loc="upper right")
+        # Eje secundario para el uso de CPU
+        ax2 = ax1.twinx()
+        line = ax2.plot(["Secuencial", "Paralelo"], [cpu_secuencial, cpu_paralelo], 
+                       color='red', marker='o', label="Uso de CPU (%)", linewidth=3, markersize=8)
+        ax2.set_ylabel("Uso de CPU (%)", color='red', fontsize=12)
+        ax2.tick_params(axis='y', labelcolor='red')
 
-    plt.show()
+        # Agregar valores en los puntos
+        for x, cpu_val in enumerate([cpu_secuencial, cpu_paralelo]):
+            ax2.text(x, cpu_val + 1, f'{cpu_val:.1f}%', ha='center', va='bottom', 
+                    color='red', fontweight='bold')
+
+        plt.title("Comparación de Rendimiento Estrategia Intradia: Secuencial vs Paralelo", 
+                 fontsize=14, fontweight='bold')
+        ax1.legend(loc="upper left")
+        ax2.legend(loc="upper right")
+        
+        plt.tight_layout()
+        plt.grid(True, alpha=0.3)
+
+        print("✅ Mostrando gráficos...")
+        plt.show()
+        
+        print("\n🎉 ¡Benchmarking completado exitosamente!")
+        
+    except KeyboardInterrupt:
+        print("\n🛑 Benchmarking interrumpido por el usuario.")
+        sys.exit(1)
+    except Exception as e:
+        print(f"\n❌ Error durante el benchmarking: {e}")
+        sys.exit(1)

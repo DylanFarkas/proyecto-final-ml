@@ -1,0 +1,12 @@
+services:
+  backend:
+    image: jgarcia9300/backend:latest
+    ports:
+      - "8000:8000"
+    restart: always
+
+  frontend:
+    image: jgarcia9300/frontend:latest
+    ports:
+      - "5173:80"
+    restart: always
