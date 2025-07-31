@@ -3,7 +3,7 @@ import axios from 'axios';
 const baseURL = import.meta.env.VITE_API_URL;
 
 const sentimentApi = axios.create({
-  baseURL: 'http://localhost:8000/sentiment/',
+  baseURL: 'http://34.207.166.255:8000/sentiment/',
   timeout: 180000, // 3 minutos de timeout para operaciones largas como benchmarking
 });
 

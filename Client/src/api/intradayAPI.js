@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const intradayApi = axios.create({
-  baseURL: 'http://localhost:8000/intradaily/',
+  baseURL: 'http://34.207.166.255:8000/intradaily/',
   timeout: 180000, // 3 minutos de timeout para operaciones largas como benchmarking
 });
 
