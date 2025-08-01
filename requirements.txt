@@ -1,4 +1,4 @@
-ray[serve]==2.20.0
+ray[serve]==2.31.0
 fastapi==0.110.0
 uvicorn==0.29.0
 pandas
@@ -8,3 +8,4 @@ matplotlib
 yfinance
 ta
 arch
+psutil

@@ -14,7 +14,7 @@ const InteractivePlot = ({ data }) => {
         <Tooltip />
         <Legend />
         <Line type="monotone" dataKey="portfolio_returns" name="Portafolio" stroke="#1D4ED8" strokeWidth={2} />
-        <Line type="monotone" dataKey="nasdaq_return" name="Nasdaq" stroke="#10B981" strokeWidth={2} />
+        <Line type="monotone" dataKey="nasdaq_return" name="Nasdaq" stroke="#AD46FF" strokeWidth={2} />
       </LineChart>
     </ResponsiveContainer>
   );

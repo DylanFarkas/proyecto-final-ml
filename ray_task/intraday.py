@@ -1,5 +1,3 @@
-# intradaily_strategy.py
-
 import pandas as pd
 import numpy as np
 from arch import arch_model
@@ -8,10 +6,8 @@ from ta.volatility import BollingerBands
 import os
 import ray
 
-# -------------------------
-# CARGA DE DATOS
-# -------------------------
-def cargar_datos_diarios(path):
+# Cargamos datos
+def load_daily_data(path):
     df = pd.read_csv(path)
     df = df.loc[:, ~df.columns.str.contains('^Unnamed')]
     df['Date'] = pd.to_datetime(df['Date'])
@@ -19,7 +15,7 @@ def cargar_datos_diarios(path):
     df['log_ret'] = np.log(df['Adj Close']).diff()
     return df
 
-def cargar_datos_intradia(path):
+def load_intraday_data(path):
     df = pd.read_csv(path)
     df = df.loc[:, ~df.columns.str.contains('^Unnamed')]
     df['datetime'] = pd.to_datetime(df['datetime'])
@@ -27,22 +23,20 @@ def cargar_datos_intradia(path):
     df['date'] = pd.to_datetime(df.index.date)
     return df
 
-# -------------------------
-# GARCH y señales diarias (con Ray)
-# -------------------------
+# Garch y señales con Ray
 @ray.remote
-def predecir_varianza_garch(x):
+def predict_variance_garch(x):
     model = arch_model(y=x, p=1, q=3)
     fitted = model.fit(update_freq=5, disp='off')
     return fitted.forecast(horizon=1).variance.iloc[-1, 0]
 
-def generar_senal_diaria(df):
+def generate_daily_signal(df):
     df = df.copy()
     df['variance'] = df['log_ret'].rolling(180).var()
     df = df['2020-01-01':].copy()
 
     ventanas = [df['log_ret'].iloc[i-180:i] for i in range(180, len(df)+1)]
-    futures = [predecir_varianza_garch.remote(v) for v in ventanas]
+    futures = [predict_variance_garch.remote(v) for v in ventanas]
     resultados = ray.get(futures)
 
     df.loc[df.index[179:], 'predictions'] = resultados
@@ -54,10 +48,9 @@ def generar_senal_diaria(df):
     df['signal_daily'] = df['signal_daily'].shift()
     return df
 
-# -------------------------
+
 # Señales intradía (RSI + Bollinger)
-# -------------------------
-def generar_senal_intradia(intraday_df, senales_diarias):
+def generate_signal_intradia(intraday_df, senales_diarias):
     df = intraday_df.reset_index()\
             .merge(senales_diarias[['signal_daily']].reset_index(), left_on='date', right_on='Date')\
             .set_index('datetime')
@@ -79,17 +72,26 @@ def generar_senal_intradia(intraday_df, senales_diarias):
             return np.nan
 
     df['signal_intraday'] = df.apply(signal, axis=1)
+
+    def combination(row):
+        if row['signal_daily'] == 1 and row['signal_intraday'] == 1:
+            return -1
+        elif row['signal_daily'] == -1 and row['signal_intraday'] == -1:
+            return 1
+        else:
+            return np.nan
+
+    df['return_sign'] = df.apply(combination, axis=1)
+    df['return_sign'] = df.groupby(pd.Grouper(freq='D'))['return_sign'].transform(lambda x: x.ffill())
     return df
 
-# -------------------------
+
 # Retorno final
-# -------------------------
-def calcular_retorno_final(df):
+def calculate_final_return(df):
     df = df.copy()
-    df['log_ret_intra'] = np.log(df['close']).diff()
-    df['strategy_return'] = df.apply(
-        lambda x: x['log_ret_intra'] * x['signal_intraday'] if pd.notna(x['signal_intraday']) else 0,
-        axis=1
-    )
-    df['cumulative_strategy_return'] = df['strategy_return'].cumsum()
+    df['return'] = df['close'].pct_change()
+    df['forward_return'] = df['return'].shift(-1)
+    df['strategy_return'] = df['forward_return'] * df['return_sign']
+    df['strategy_return'] = df['strategy_return'].fillna(0)
+    df['cumulative_strategy_return'] = np.exp(np.log1p(df['strategy_return']).cumsum()) - 1
     return df

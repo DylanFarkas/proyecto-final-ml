@@ -1,4 +1,3 @@
-// src/components/ReturnsPlot.jsx
 import { useEffect, useState } from "react";
 import { getPlot } from "../../api/sentimentAPI";
 
