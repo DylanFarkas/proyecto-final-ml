@@ -16,7 +16,7 @@ services:
       dockerfile: Dockerfile
     image: esteban93040/frontend:latest
     ports:
-      - "5173:80"  # frontend será accesible desde la IP pública:5173
+      - "5173:80"  
     restart: always
     depends_on:
       - backend
